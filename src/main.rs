@@ -96,9 +96,9 @@ fn main() {
         if let Some(command) = UciCommand::parse(&line.unwrap()) {
             match command {
                 UciCommand::Uci => {
-                    println!("uciok");
                     println!("id name Updog");
                     println!("id name SystematicError");
+                    println!("uciok");
                 }
 
                 UciCommand::IsReady => {
