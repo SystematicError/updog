@@ -97,7 +97,7 @@ fn main() {
             match command {
                 UciCommand::Uci => {
                     println!("id name Updog");
-                    println!("id name SystematicError");
+                    println!("id author SystematicError");
                     println!("uciok");
                 }
 
