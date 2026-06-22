@@ -3,31 +3,83 @@ use cozy_chess::{Board, Color, Piece};
 #[inline(always)]
 pub fn piece_value(piece: Piece) -> i32 {
     match piece {
-        Piece::King => 10000,
+        Piece::King => 20000,
         Piece::Queen => 900,
         Piece::Rook => 500,
-        Piece::Bishop => 310,
-        Piece::Knight => 300,
+        Piece::Bishop => 330,
+        Piece::Knight => 320,
         Piece::Pawn => 100,
     }
 }
 
-pub fn evaluate(board: &Board) -> i32 {
-    let mut material_score = 0;
+const KING_START_TABLE: [i32; 64] = [
+    -30, -40, -40, -50, -50, -40, -40, -30, -30, -40, -40, -50, -50, -40, -40, -30, -30, -40, -40,
+    -50, -50, -40, -40, -30, -30, -40, -40, -50, -50, -40, -40, -30, -20, -30, -30, -40, -40, -30,
+    -30, -20, -10, -20, -20, -20, -20, -20, -20, -10, 20, 20, 0, 0, 0, 0, 20, 20, 20, 30, 10, 0, 0,
+    10, 30, 20,
+];
 
-    for piece in [
-        Piece::Queen,
-        Piece::Rook,
-        Piece::Bishop,
-        Piece::Knight,
-        Piece::Pawn,
+const KING_END_TABLE: [i32; 64] = [
+    -50, -40, -30, -20, -20, -30, -40, -50, -30, -20, -10, 0, 0, -10, -20, -30, -30, -10, 20, 30,
+    30, 20, -10, -30, -30, -10, 30, 40, 40, 30, -10, -30, -30, -10, 30, 40, 40, 30, -10, -30, -30,
+    -10, 20, 30, 30, 20, -10, -30, -30, -30, 0, 0, 0, 0, -30, -30, -50, -30, -30, -30, -30, -30,
+    -30, -50,
+];
+
+const QUEEN_TABLE: [i32; 64] = [
+    -20, -10, -10, -5, -5, -10, -10, -20, -10, 0, 0, 0, 0, 0, 0, -10, -10, 0, 5, 5, 5, 5, 0, -10,
+    -5, 0, 5, 5, 5, 5, 0, -5, 0, 0, 5, 5, 5, 5, 0, -5, -10, 5, 5, 5, 5, 5, 0, -10, -10, 0, 5, 0, 0,
+    0, 0, -10, -20, -10, -10, -5, -5, -10, -10, -20,
+];
+
+const ROOK_TABLE: [i32; 64] = [
+    0, 0, 0, 0, 0, 0, 0, 0, 5, 10, 10, 10, 10, 10, 10, 5, -5, 0, 0, 0, 0, 0, 0, -5, -5, 0, 0, 0, 0,
+    0, 0, -5, -5, 0, 0, 0, 0, 0, 0, -5, -5, 0, 0, 0, 0, 0, 0, -5, -5, 0, 0, 0, 0, 0, 0, -5, 0, 0,
+    0, 5, 5, 0, 0, 0,
+];
+
+const BISHOP_TABLE: [i32; 64] = [
+    -20, -10, -10, -10, -10, -10, -10, -20, -10, 0, 0, 0, 0, 0, 0, -10, -10, 0, 5, 10, 10, 5, 0,
+    -10, -10, 5, 5, 10, 10, 5, 5, -10, -10, 0, 10, 10, 10, 10, 0, -10, -10, 10, 10, 10, 10, 10, 10,
+    -10, -10, 5, 0, 0, 0, 0, 5, -10, -20, -10, -10, -10, -10, -10, -10, -20,
+];
+
+const KNIGHT_TABLE: [i32; 64] = [
+    -50, -40, -30, -30, -30, -30, -40, -50, -40, -20, 0, 0, 0, 0, -20, -40, -30, 0, 10, 15, 15, 10,
+    0, -30, -30, 5, 15, 20, 20, 15, 5, -30, -30, 0, 15, 20, 20, 15, 0, -30, -30, 5, 10, 15, 15, 10,
+    5, -30, -40, -20, 0, 5, 5, 0, -20, -40, -50, -40, -30, -30, -30, -30, -40, -50,
+];
+
+const PAWN_TABLE: [i32; 64] = [
+    0, 0, 0, 0, 0, 0, 0, 0, 50, 50, 50, 50, 50, 50, 50, 50, 10, 10, 20, 30, 30, 20, 10, 10, 5, 5,
+    10, 25, 25, 10, 5, 5, 0, 0, 0, 20, 20, 0, 0, 0, 5, -5, -10, 0, 0, -10, -5, 5, 5, 10, 10, -20,
+    -20, 10, 10, 5, 0, 0, 0, 0, 0, 0, 0, 0,
+];
+
+pub fn evaluate(board: &Board) -> i32 {
+    let mut score = 0;
+
+    for (piece, table) in [
+        (Piece::Queen, QUEEN_TABLE),
+        (Piece::Rook, ROOK_TABLE),
+        (Piece::Bishop, BISHOP_TABLE),
+        (Piece::Knight, KNIGHT_TABLE),
+        (Piece::Pawn, PAWN_TABLE),
     ] {
+        let white_pieces = board.colored_pieces(Color::White, piece);
+        let black_pieces = board.colored_pieces(Color::Black, piece);
+
         let value = piece_value(piece);
 
-        let white_count = board.colored_pieces(Color::White, piece).len() as i32;
-        let black_count = board.colored_pieces(Color::Black, piece).len() as i32;
+        score += value * (white_pieces.len() as i32 - black_pieces.len() as i32);
 
-        material_score += value * (white_count - black_count)
+        for square in white_pieces {
+            score += table[square as usize];
+        }
+
+        for square in black_pieces {
+            score -= table[square.relative_to(Color::Black) as usize];
+        }
     }
 
     let perspective = match board.side_to_move() {
@@ -35,5 +87,5 @@ pub fn evaluate(board: &Board) -> i32 {
         Color::Black => -1,
     };
 
-    material_score * perspective
+    score * perspective
 }
