@@ -34,7 +34,8 @@ fn _search(
     }
 
     if depth == 0 {
-        return quiescence(board, MIN_SCORE, MAX_SCORE);
+        return evaluate(board);
+        // return quiescence(board, MIN_SCORE, MAX_SCORE);
     }
 
     let mut best_score = MIN_SCORE;
