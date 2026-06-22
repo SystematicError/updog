@@ -22,3 +22,7 @@ pub fn capture_pair(board: &Board, mv: Move) -> Option<(Piece, Piece)> {
 
     victim.map(|v| (attacker, v))
 }
+
+pub fn is_capture(board: &Board, mv: Move) -> bool {
+    capture_pair(board, mv).is_none()
+}
