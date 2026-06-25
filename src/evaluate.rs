@@ -82,6 +82,23 @@ pub fn evaluate(board: &Board) -> i32 {
         }
     }
 
+    for (color, perspective) in [(Color::White, 1), (Color::Black, -1)] {
+        let mut king_square = board.king(color);
+
+        if color == Color::Black {
+            king_square = king_square.relative_to(Color::Black);
+        }
+
+        let enemy_count = board.colors(!color).len() as f32;
+        let phase = (16.0 - enemy_count) / 15.0;
+
+        let start_score = KING_START_TABLE[king_square as usize] as f32;
+        let end_score = KING_END_TABLE[king_square as usize] as f32;
+        let king_score = f32::min(start_score, end_score) + (start_score - end_score).abs() * phase;
+
+        score += king_score as i32 * perspective;
+    }
+
     let perspective = match board.side_to_move() {
         Color::White => 1,
         Color::Black => -1,

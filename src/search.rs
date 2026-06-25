@@ -12,7 +12,7 @@ const DRAWN_SCORE: i32 = 0;
 pub fn search(position: &Position) -> Option<Move> {
     let mut best_move = None;
 
-    _search(position, MIN_SCORE, MAX_SCORE, true, &mut best_move, 3);
+    _search(position, MIN_SCORE, MAX_SCORE, true, &mut best_move, 4);
 
     best_move
 }
