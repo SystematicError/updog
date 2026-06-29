@@ -1,124 +1,34 @@
+mod engine;
+mod position;
+mod uci;
+
 use crate::engine::Engine;
-use crate::position::Position;
-use cozy_chess::Board;
-use cozy_chess::util::{display_uci_move, parse_uci_move};
+use crate::uci::Uci;
+use cozy_chess::util::display_uci_move;
 use std::io::{BufRead, stdin};
 use std::process::exit;
-
-mod captures;
-mod engine;
-mod evaluate;
-mod ordering;
-mod position;
-mod search;
-
-enum UciCommand {
-    Uci,
-    IsReady,
-    SetOption(String, Option<String>),
-    Position(Position),
-    Go,
-    Quit,
-}
-
-impl UciCommand {
-    fn parse(input: &str) -> Option<Self> {
-        let mut tokens = input.split_ascii_whitespace();
-
-        let command = tokens.next()?;
-
-        Some(match command {
-            "uci" => UciCommand::Uci,
-            "isready" => UciCommand::IsReady,
-
-            "setoption" => {
-                if tokens.next()? != "name" {
-                    return None;
-                };
-
-                let name = tokens.next()?.to_string();
-
-                let value_token = tokens.next();
-
-                if let None = value_token {
-                    UciCommand::SetOption(name, None)
-                } else if let Some("value") = value_token {
-                    UciCommand::SetOption(name, tokens.next().map(|s| s.to_string()))
-                } else {
-                    return None;
-                }
-            }
-
-            "position" => {
-                let mut position = Position::new(match tokens.next()? {
-                    "startpos" => Board::default(),
-
-                    "fen" => {
-                        let fen: Vec<_> = tokens.by_ref().take(6).collect();
-
-                        if fen.len() != 6 {
-                            return None;
-                        }
-
-                        Board::from_fen(&fen.join(" "), false).ok()?
-                    }
-
-                    _ => return None,
-                });
-
-                let moves_token = tokens.next();
-
-                if let None = moves_token {
-                    UciCommand::Position(position)
-                } else if let Some("moves") = moves_token {
-                    for mv in tokens {
-                        let mv = parse_uci_move(position.board(), mv);
-
-                        if let Ok(mv) = mv {
-                            if position.try_play(mv).is_err() {
-                                break;
-                            }
-                        } else {
-                            break;
-                        }
-                    }
-
-                    UciCommand::Position(position)
-                } else {
-                    return None;
-                }
-            }
-
-            "go" => UciCommand::Go,
-
-            "quit" => UciCommand::Quit,
-
-            _ => return None,
-        })
-    }
-}
 
 fn main() {
     let mut engine = Engine::new();
 
     for line in stdin().lock().lines() {
-        if let Some(command) = UciCommand::parse(&line.unwrap()) {
+        if let Some(command) = Uci::parse(&line.unwrap()) {
             match command {
-                UciCommand::Uci => {
+                Uci::Uci => {
                     println!("id name Updog");
                     println!("id author SystematicError");
+                    println!("option name Threads type spin default 1 min 1 max 1");
+                    println!("option name Hash type spin default 0 min 0 max 0");
                     println!("uciok");
                 }
 
-                UciCommand::IsReady => {
-                    println!("readyok");
-                }
+                Uci::IsReady => println!("readyok"),
 
-                UciCommand::SetOption(_name, _value) => {}
+                Uci::SetOption(_name, _value) => {}
 
-                UciCommand::Position(position) => engine.set_position(position),
+                Uci::Position(position) => engine.set_position(position),
 
-                UciCommand::Go => {
+                Uci::Go => {
                     if let Some((board, mv)) = engine.best_move() {
                         println!("bestmove {}", display_uci_move(board, mv));
                     } else {
@@ -126,9 +36,7 @@ fn main() {
                     }
                 }
 
-                UciCommand::Quit => {
-                    exit(0);
-                }
+                Uci::Quit => exit(0),
             }
         }
     }

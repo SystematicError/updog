@@ -1,5 +1,4 @@
 use crate::position::Position;
-use crate::search::search;
 use cozy_chess::{Board, Move};
 
 pub struct Engine {
@@ -18,6 +17,17 @@ impl Engine {
     }
 
     pub fn best_move(&mut self) -> Option<(&Board, Move)> {
-        search(&self.position).map(|mv| (self.position.board(), mv))
+        let mut best_move = None;
+
+        self.position.board().generate_moves(|moves| {
+            for mv in moves {
+                best_move = Some(mv);
+                return true;
+            }
+
+            false
+        });
+
+        best_move.map(|mv| (self.position.board(), mv))
     }
 }
