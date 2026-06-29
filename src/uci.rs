@@ -81,7 +81,12 @@ impl Uci {
                 Uci::Position(position)
             }
 
-            "go" => Uci::Go,
+            "go" => {
+                // TODO: Parse options passed to go
+                let _ = tokens.by_ref().collect::<String>();
+
+                Uci::Go
+            }
 
             "quit" => Uci::Quit,
 
