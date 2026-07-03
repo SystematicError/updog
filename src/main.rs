@@ -1,4 +1,6 @@
 mod engine;
+mod evaluate;
+mod search;
 mod uci;
 
 use crate::engine::Engine;

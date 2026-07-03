@@ -1,3 +1,4 @@
+use crate::search::deepen;
 use cozy_chess::{Board, Move};
 
 pub struct Engine {
@@ -21,17 +22,6 @@ impl Engine {
     }
 
     pub fn best_move(&mut self) -> Option<(&Board, Move)> {
-        let mut best_move = None;
-
-        self.board.generate_moves(|moves| {
-            for mv in moves {
-                best_move = Some(mv);
-                return true;
-            }
-
-            false
-        });
-
-        best_move.map(|mv| (&self.board, mv))
+        deepen(&self.board, &mut self.history).map(|mv| (&self.board, mv))
     }
 }
