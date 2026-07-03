@@ -1,5 +1,5 @@
 use crate::evaluate::{Evaluation, evaluate};
-use cozy_chess::{Board, Move};
+use cozy_chess::{Board, GameStatus, Move};
 
 type Depth = u8;
 
@@ -76,6 +76,12 @@ fn negamax(
     beta: Evaluation,
     depth: Depth,
 ) -> Evaluation {
+    match board.status() {
+        GameStatus::Won => return -Evaluation::MAX + 1,
+        GameStatus::Drawn => return 0,
+        GameStatus::Ongoing => {}
+    }
+
     if depth == 0 {
         return evaluate(board);
     }
