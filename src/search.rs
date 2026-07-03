@@ -76,7 +76,7 @@ fn negamax(
     beta: Evaluation,
     depth: Depth,
 ) -> Evaluation {
-    match board.status() {
+    match game_status(board, history) {
         GameStatus::Won => return -Evaluation::MAX + 1,
         GameStatus::Drawn => return 0,
         GameStatus::Ongoing => {}
@@ -116,4 +116,28 @@ fn negamax(
     });
 
     best_score
+}
+
+fn game_status(board: &Board, history: &mut Vec<u64>) -> GameStatus {
+    let status = board.status();
+
+    if status != GameStatus::Ongoing {
+        return status;
+    }
+
+    let current_hash = board.hash();
+
+    let repetitions = history
+        .iter()
+        .rev()
+        .take(board.halfmove_clock() as usize + 1)
+        .step_by(2)
+        .filter(|&&hash| hash == current_hash)
+        .count();
+
+    if repetitions >= 3 {
+        return GameStatus::Drawn;
+    }
+
+    GameStatus::Ongoing
 }
