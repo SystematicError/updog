@@ -1,5 +1,4 @@
 mod engine;
-mod position;
 mod uci;
 
 use crate::engine::Engine;
@@ -26,7 +25,7 @@ fn main() {
 
                 Uci::SetOption(_name, _value) => {}
 
-                Uci::Position(position) => engine.set_position(position),
+                Uci::Position(board, history) => engine.set_position(board, history),
 
                 Uci::Go => {
                     if let Some((board, mv)) = engine.best_move() {

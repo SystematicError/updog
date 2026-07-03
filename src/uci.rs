@@ -1,4 +1,3 @@
-use crate::position::Position;
 use cozy_chess::Board;
 use cozy_chess::util::parse_uci_move;
 
@@ -6,7 +5,7 @@ pub enum Uci {
     Uci,
     IsReady,
     SetOption(String, Option<String>),
-    Position(Position),
+    Position(Board, Vec<u64>),
     Go,
     Quit,
 }
@@ -46,7 +45,7 @@ impl Uci {
             }
 
             "position" => {
-                let mut position = Position::new(match tokens.next()? {
+                let mut board = match tokens.next()? {
                     "startpos" => Board::default(),
 
                     "fen" => {
@@ -60,7 +59,9 @@ impl Uci {
                     }
 
                     _ => return None,
-                });
+                };
+
+                let mut history = vec![board.hash()];
 
                 if let Some(token) = tokens.next()
                     && token != "moves"
@@ -72,13 +73,14 @@ impl Uci {
                 tokens
                     .by_ref()
                     .map_while(|mv| {
-                        let mv = parse_uci_move(position.board(), mv).ok()?;
-                        position.try_play(mv).ok()?;
+                        let mv = parse_uci_move(&board, mv).ok()?;
+                        board.try_play(mv).ok()?;
+                        history.push(board.hash());
                         Some(())
                     })
                     .count();
 
-                Uci::Position(position)
+                Uci::Position(board, history)
             }
 
             "go" => {
