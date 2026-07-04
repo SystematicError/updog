@@ -13,6 +13,13 @@ fn piece_value(piece: Piece) -> Evaluation {
     }
 }
 
+const KING_START_TABLE: [Evaluation; Square::NUM] = [
+    -30, -40, -40, -50, -50, -40, -40, -30, -30, -40, -40, -50, -50, -40, -40, -30, -30, -40, -40,
+    -50, -50, -40, -40, -30, -30, -40, -40, -50, -50, -40, -40, -30, -20, -30, -30, -40, -40, -30,
+    -30, -20, -10, -20, -20, -20, -20, -20, -20, -10, 20, 20, 0, 0, 0, 0, 20, 20, 20, 30, 10, 0, 0,
+    10, 30, 20,
+];
+
 const QUEEN_TABLE: [Evaluation; Square::NUM] = [
     -20, -10, -10, -5, -5, -10, -10, -20, -10, 0, 0, 0, 0, 0, 0, -10, -10, 0, 5, 5, 5, 5, 0, -10,
     -5, 0, 5, 5, 5, 5, 0, -5, 0, 0, 5, 5, 5, 5, 0, -5, -10, 5, 5, 5, 5, 5, 0, -10, -10, 0, 5, 0, 0,
@@ -47,6 +54,7 @@ pub fn evaluate(board: &Board) -> Evaluation {
     let mut score = 0;
 
     for (piece, table) in [
+        (Piece::King, KING_START_TABLE),
         (Piece::Queen, QUEEN_TABLE),
         (Piece::Rook, ROOK_TABLE),
         (Piece::Bishop, BISHOP_TABLE),
