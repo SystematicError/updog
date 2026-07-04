@@ -35,16 +35,28 @@ impl PVLine {
     }
 }
 
+struct SearchInfo {
+    pub nodes: usize,
+}
+
+impl SearchInfo {
+    pub fn new() -> Self {
+        Self { nodes: 0 }
+    }
+}
+
 pub fn deepen(board: &Board, history: &mut Vec<u64>) -> Option<Move> {
     let mut best_move = None;
 
     for depth in 1..=4 {
         let pv_line = &mut PVLine::new();
+        let info = &mut SearchInfo::new();
 
         let score = negamax(
             board,
             history,
             pv_line,
+            info,
             -Evaluation::MAX,
             Evaluation::MAX,
             depth,
@@ -53,9 +65,10 @@ pub fn deepen(board: &Board, history: &mut Vec<u64>) -> Option<Move> {
         best_move = pv_line.first();
 
         println!(
-            "info depth {} score cp {} pv {}",
+            "info depth {} score cp {} nodes {} pv {}",
             depth,
             score,
+            info.nodes,
             pv_line
                 .moves()
                 .iter()
@@ -72,10 +85,13 @@ fn negamax(
     board: &Board,
     history: &mut Vec<u64>,
     pv_line: &mut PVLine,
+    info: &mut SearchInfo,
     mut alpha: Evaluation,
     beta: Evaluation,
     depth: Depth,
 ) -> Evaluation {
+    info.nodes += 1;
+
     match game_status(board, history) {
         GameStatus::Won => return -Evaluation::MAX + 1,
         GameStatus::Drawn => return 0,
@@ -95,7 +111,15 @@ fn negamax(
             new_board.play_unchecked(mv);
 
             history.push(new_board.hash());
-            let score = -negamax(&new_board, history, new_line, -beta, -alpha, depth - 1);
+            let score = -negamax(
+                &new_board,
+                history,
+                new_line,
+                info,
+                -beta,
+                -alpha,
+                depth - 1,
+            );
             history.pop();
 
             if score > best_score {
