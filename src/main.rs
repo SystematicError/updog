@@ -1,6 +1,7 @@
 mod display;
 mod engine;
 mod evaluate;
+mod principal_variation;
 mod search;
 mod uci;
 

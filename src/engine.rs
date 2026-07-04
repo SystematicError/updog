@@ -1,9 +1,11 @@
+use crate::principal_variation::PVLine;
 use crate::search::deepen;
 use cozy_chess::{Board, Move};
 
 pub struct Engine {
     board: Board,
     history: Vec<u64>,
+    pv_line: PVLine,
 }
 
 impl Engine {
@@ -13,6 +15,7 @@ impl Engine {
         Self {
             history: vec![board.hash()],
             board: board,
+            pv_line: PVLine::new(),
         }
     }
 
@@ -26,6 +29,6 @@ impl Engine {
     }
 
     pub fn best_move(&mut self) -> Option<(&Board, Move)> {
-        deepen(&self.board, &mut self.history).map(|mv| (&self.board, mv))
+        deepen(&self.board, &mut self.history, &mut self.pv_line).map(|mv| (&self.board, mv))
     }
 }

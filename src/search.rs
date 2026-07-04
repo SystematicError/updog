@@ -1,39 +1,8 @@
 use crate::evaluate::{Evaluation, evaluate};
+use crate::principal_variation::PVLine;
 use cozy_chess::{Board, GameStatus, Move};
 
-type Depth = u8;
-
-struct PVLine {
-    size: usize,
-    line: [Move; Depth::MAX as usize],
-}
-
-impl PVLine {
-    pub fn new() -> Self {
-        Self {
-            size: 0,
-            line: [unsafe { std::mem::zeroed() }; Depth::MAX as usize],
-        }
-    }
-
-    pub fn moves(&self) -> &[Move] {
-        &self.line[..self.size]
-    }
-
-    pub fn first(&self) -> Option<Move> {
-        if self.size <= 0 {
-            return None;
-        }
-
-        Some(self.line[0])
-    }
-
-    fn extend(&mut self, mv: Move, new_line: &Self) {
-        self.line[0] = mv;
-        self.line[1..=new_line.size].copy_from_slice(&new_line.line[..new_line.size]);
-        self.size = new_line.size + 1;
-    }
-}
+pub type Depth = u8;
 
 struct SearchInfo {
     pub nodes: usize,
@@ -45,11 +14,9 @@ impl SearchInfo {
     }
 }
 
-pub fn deepen(board: &Board, history: &mut Vec<u64>) -> Option<Move> {
-    let mut best_move = None;
-
+pub fn deepen(board: &Board, history: &mut Vec<u64>, pv_line: &mut PVLine) -> Option<Move> {
     for depth in 1..=4 {
-        let pv_line = &mut PVLine::new();
+        pv_line.clear();
         let info = &mut SearchInfo::new();
 
         let score = negamax(
@@ -61,8 +28,6 @@ pub fn deepen(board: &Board, history: &mut Vec<u64>) -> Option<Move> {
             Evaluation::MAX,
             depth,
         );
-
-        best_move = pv_line.first();
 
         println!(
             "info depth {} score cp {} nodes {} pv {}",
@@ -78,7 +43,7 @@ pub fn deepen(board: &Board, history: &mut Vec<u64>) -> Option<Move> {
         );
     }
 
-    best_move
+    pv_line.first()
 }
 
 fn negamax(
