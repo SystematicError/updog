@@ -14,7 +14,7 @@ pub enum Uci {
 }
 
 impl Uci {
-    pub fn parse(input: &str) -> Option<Self> {
+    pub fn parse(input: &str, chess960: bool) -> Option<Self> {
         let mut tokens = input.split_whitespace();
 
         let command = tokens.next()?;
@@ -58,7 +58,7 @@ impl Uci {
                             return None;
                         }
 
-                        Board::from_fen(&fen.join(" "), false).ok()?
+                        Board::from_fen(&fen.join(" "), chess960).ok()?
                     }
 
                     _ => return None,
