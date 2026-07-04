@@ -1,8 +1,10 @@
+mod display;
 mod engine;
 mod evaluate;
 mod search;
 mod uci;
 
+use crate::display::display_board;
 use crate::engine::Engine;
 use crate::uci::Uci;
 use cozy_chess::util::display_uci_move;
@@ -38,6 +40,10 @@ fn main() {
                 }
 
                 Uci::Quit => exit(0),
+
+                Uci::D => {
+                    display_board(engine.board());
+                }
             }
         }
     }

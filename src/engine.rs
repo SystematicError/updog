@@ -16,6 +16,10 @@ impl Engine {
         }
     }
 
+    pub fn board(&self) -> &Board {
+        &self.board
+    }
+
     pub fn set_position(&mut self, board: Board, history: Vec<u64>) {
         self.board = board;
         self.history = history;

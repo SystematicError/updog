@@ -8,6 +8,9 @@ pub enum Uci {
     Position(Board, Vec<u64>),
     Go,
     Quit,
+
+    // Non standard commands
+    D,
 }
 
 impl Uci {
@@ -91,6 +94,8 @@ impl Uci {
             }
 
             "quit" => Uci::Quit,
+
+            "d" => Uci::D,
 
             _ => return None,
         };
