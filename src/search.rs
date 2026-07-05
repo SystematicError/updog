@@ -1,4 +1,4 @@
-use crate::evaluate::{Evaluation, evaluate};
+use crate::evaluate::{Evaluation, EvaluationUtils, evaluate};
 use crate::principal_variation::PVLine;
 use cozy_chess::{Board, GameStatus, Move, Piece};
 
@@ -24,8 +24,8 @@ pub fn deepen(board: &Board, history: &mut Vec<u64>, pv_line: &mut PVLine) -> Op
             history,
             pv_line,
             info,
-            -Evaluation::MAX,
-            Evaluation::MAX,
+            -Evaluation::INFINITY,
+            Evaluation::INFINITY,
             depth,
         );
 
@@ -58,8 +58,8 @@ fn negamax(
     info.nodes += 1;
 
     match game_status(board, history) {
-        GameStatus::Won => return -Evaluation::MAX + 1,
-        GameStatus::Drawn => return 0,
+        GameStatus::Won => return Evaluation::MATED,
+        GameStatus::Drawn => return Evaluation::DRAWN,
         GameStatus::Ongoing => {}
     }
 

@@ -2,6 +2,18 @@ use cozy_chess::{Board, Color, Piece, Square};
 
 pub type Evaluation = i32;
 
+pub trait EvaluationUtils {
+    const INFINITY: Self;
+    const MATED: Self;
+    const DRAWN: Self;
+}
+
+impl EvaluationUtils for Evaluation {
+    const INFINITY: Self = Self::MAX;
+    const MATED: Self = -Self::INFINITY + 1;
+    const DRAWN: Self = 0;
+}
+
 fn piece_value(piece: Piece) -> Evaluation {
     match piece {
         Piece::King => 20000,
