@@ -1,6 +1,6 @@
 use crate::evaluate::{Evaluation, evaluate};
 use crate::principal_variation::PVLine;
-use cozy_chess::{Board, GameStatus, Move};
+use cozy_chess::{Board, GameStatus, Move, Piece};
 
 pub type Depth = u8;
 
@@ -114,6 +114,8 @@ fn game_status(board: &Board, history: &mut Vec<u64>) -> GameStatus {
         return status;
     }
 
+    // Threefold repetition
+
     let current_hash = board.hash();
 
     let repetitions = history
@@ -125,6 +127,25 @@ fn game_status(board: &Board, history: &mut Vec<u64>) -> GameStatus {
         .count();
 
     if repetitions >= 3 {
+        return GameStatus::Drawn;
+    }
+
+    // Insufficient material
+
+    // NOTE: Functionally correct, but SPRT indicates that the engine gains no strength with this check
+    // TODO: Test this change later when the engine can do more deeper searches
+
+    let rooks = board.pieces(Piece::Rook);
+    let queens = board.pieces(Piece::Queen);
+    let pawns = board.pieces(Piece::Pawn);
+
+    let insufficient = match board.occupied().len() {
+        2 => true,
+        3 => (rooks | queens | pawns).is_empty(),
+        _ => false,
+    };
+
+    if insufficient {
         return GameStatus::Drawn;
     }
 
