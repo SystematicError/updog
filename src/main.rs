@@ -44,11 +44,12 @@ fn main() {
                 Uci::Position(board, history) => engine.set_position(board, history),
 
                 Uci::Go => {
-                    if let Some((board, mv)) = engine.best_move() {
-                        println!("bestmove {}", display_uci_move(board, mv));
-                    } else {
-                        println!("bestmove (none)");
-                    }
+                    let mv = match engine.best_move() {
+                        Some((board, mv)) => &display_uci_move(board, mv).to_string(),
+                        None => "(none)",
+                    };
+
+                    println!("bestmove {}", mv);
                 }
 
                 Uci::Quit => exit(0),
