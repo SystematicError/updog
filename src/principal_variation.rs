@@ -1,38 +1,33 @@
 use crate::search::Depth;
+use arrayvec::ArrayVec;
 use cozy_chess::Move;
 
 pub struct PVLine {
-    size: usize,
-    line: [Move; Depth::MAX as usize],
+    line: ArrayVec<Move, { Depth::MAX as usize }>,
 }
 
 impl PVLine {
     pub fn new() -> Self {
         Self {
-            size: 0,
-            line: [unsafe { std::mem::zeroed() }; Depth::MAX as usize],
+            line: ArrayVec::new(),
         }
     }
 
     pub fn moves(&self) -> &[Move] {
-        &self.line[..self.size]
+        &self.line.as_slice()
     }
 
     pub fn first(&self) -> Option<Move> {
-        if self.size <= 0 {
-            return None;
-        }
-
-        Some(self.line[0])
+        self.line.first().copied()
     }
 
     pub fn clear(&mut self) {
-        self.size = 0;
+        self.line.clear();
     }
 
     pub fn extend(&mut self, mv: Move, new_line: &Self) {
-        self.line[0] = mv;
-        self.line[1..=new_line.size].copy_from_slice(&new_line.line[..new_line.size]);
-        self.size = new_line.size + 1;
+        self.line.clear();
+        self.line.push(mv);
+        self.line.try_extend_from_slice(&new_line.line).unwrap();
     }
 }

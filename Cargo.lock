@@ -3,6 +3,12 @@
 version = 4
 
 [[package]]
+name = "arrayvec"
+version = "0.7.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d3fb67a6e08acf24fdeccbac2cb6ac4305825bd1f117462e0e6f2f193345ad56"
+
+[[package]]
 name = "cozy-chess"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -21,5 +27,6 @@ checksum = "276b4804775347af35852c80665ad23d62a9ee742a14656e7da6a7b1cee74ee9"
 name = "updog"
 version = "0.1.0"
 dependencies = [
+ "arrayvec",
  "cozy-chess",
 ]
