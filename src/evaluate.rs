@@ -1,17 +1,41 @@
+use crate::search::Ply;
 use cozy_chess::{Board, Color, Piece, Square};
+use std::fmt::Display;
 
 pub type Evaluation = i32;
 
 pub trait EvaluationUtils {
     const INFINITY: Self;
+    const MATE: Self;
     const MATED: Self;
     const DRAWN: Self;
+
+    fn mated_in(ply: Ply) -> Self;
+    fn display_uci(&self) -> impl Display;
 }
 
 impl EvaluationUtils for Evaluation {
     const INFINITY: Self = Self::MAX;
-    const MATED: Self = -Self::INFINITY + 1;
+    const MATE: Self = Self::INFINITY - 1;
+    const MATED: Self = -Self::MATE;
     const DRAWN: Self = 0;
+
+    fn mated_in(ply: Ply) -> Self {
+        Self::MATED + ply as Self
+    }
+
+    fn display_uci(&self) -> impl Display {
+        let mate_bound = Self::MATE - Ply::MAX as Self;
+        let mated_bound = Self::MATED + Ply::MAX as Self;
+
+        if (mate_bound..=Self::MATE).contains(self) {
+            format!("mate {}", (Self::MATE - *self + 1) / 2)
+        } else if (Self::MATED..=mated_bound).contains(self) {
+            format!("mate -{}", (*self - Self::MATED) / 2)
+        } else {
+            format!("cp {}", self)
+        }
+    }
 }
 
 fn piece_value(piece: Piece) -> Evaluation {

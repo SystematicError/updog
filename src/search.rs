@@ -2,7 +2,7 @@ use crate::evaluate::{Evaluation, EvaluationUtils, evaluate};
 use crate::principal_variation::PVLine;
 use cozy_chess::{Board, GameStatus, Move, Piece};
 
-pub type Depth = u8;
+pub type Ply = u8;
 
 struct SearchInfo {
     pub nodes: usize,
@@ -27,12 +27,13 @@ pub fn deepen(board: &Board, history: &mut Vec<u64>, pv_line: &mut PVLine) -> Op
             -Evaluation::INFINITY,
             Evaluation::INFINITY,
             depth,
+            0,
         );
 
         println!(
-            "info depth {} score cp {} nodes {} pv {}",
+            "info depth {} score {} nodes {} pv {}",
             depth,
-            score,
+            score.display_uci(),
             info.nodes,
             pv_line
                 .moves()
@@ -53,12 +54,13 @@ fn negamax(
     info: &mut SearchInfo,
     mut alpha: Evaluation,
     beta: Evaluation,
-    depth: Depth,
+    depth: Ply,
+    ply: Ply,
 ) -> Evaluation {
     info.nodes += 1;
 
     match game_status(board, history) {
-        GameStatus::Won => return Evaluation::MATED,
+        GameStatus::Won => return Evaluation::mated_in(ply),
         GameStatus::Drawn => return Evaluation::DRAWN,
         GameStatus::Ongoing => {}
     }
@@ -84,6 +86,7 @@ fn negamax(
                 -beta,
                 -alpha,
                 depth - 1,
+                ply + 1,
             );
             history.pop();
 

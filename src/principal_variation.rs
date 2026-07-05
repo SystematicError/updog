@@ -1,9 +1,9 @@
-use crate::search::Depth;
+use crate::search::Ply;
 use arrayvec::ArrayVec;
 use cozy_chess::Move;
 
 pub struct PVLine {
-    line: ArrayVec<Move, { Depth::MAX as usize }>,
+    line: ArrayVec<Move, { Ply::MAX as usize }>,
 }
 
 impl PVLine {
