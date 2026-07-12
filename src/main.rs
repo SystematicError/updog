@@ -1,6 +1,8 @@
+mod display;
 mod engine;
 mod uci;
 
+use crate::display::display_board;
 use crate::engine::Engine;
 use crate::uci::Uci;
 use std::io::{BufRead, stdin};
@@ -49,7 +51,7 @@ fn main() {
 
                 Uci::Quit => exit(0),
 
-                Uci::D => println!("{}", engine.board()),
+                Uci::D => display_board(engine.board()),
 
                 Uci::Bench(_depth) => todo!(),
             }
