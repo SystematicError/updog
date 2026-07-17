@@ -1,3 +1,4 @@
+use crate::search::{Ply, SearchOptions};
 use cozy_chess::util::parse_uci_move;
 use cozy_chess::{Board, Move};
 use std::time::Duration;
@@ -9,7 +10,7 @@ pub enum Uci {
     NewGame,
     SetOption(String, Option<String>),
     Position(Board, Vec<Move>),
-    Go(SearchParameters),
+    Go(SearchOptions),
     Stop,
     Quit,
 
@@ -18,40 +19,6 @@ pub enum Uci {
     Bench(Ply),
 }
 
-pub struct SearchParameters {
-    // Standard clock timing
-    wtime: Duration,
-    btime: Duration,
-    winc: Duration,
-    binc: Duration,
-
-    // Other timing options
-    movetime: Duration,
-    infinite: bool,
-
-    // Search restrictions
-    depth: Ply,
-    nodes: usize,
-}
-
-impl Default for SearchParameters {
-    fn default() -> Self {
-        Self {
-            wtime: Duration::ZERO,
-            btime: Duration::ZERO,
-            winc: Duration::ZERO,
-            binc: Duration::ZERO,
-
-            movetime: Duration::ZERO,
-            infinite: false,
-
-            depth: Ply::MAX,
-            nodes: usize::MAX,
-        }
-    }
-}
-
-type Ply = u8;
 const BENCH_DEFAULT_DEPTH: Ply = 7;
 
 impl Uci {
@@ -133,46 +100,45 @@ impl Uci {
             }
 
             "go" => {
-                let mut parameters = SearchParameters::default();
+                let mut options = SearchOptions::default();
 
                 while let Some(token) = tokens.next() {
                     match token {
                         "wtime" => {
-                            parameters.wtime = Duration::from_millis(tokens.next()?.parse().ok()?);
+                            options.wtime = Duration::from_millis(tokens.next()?.parse().ok()?);
                         }
 
                         "btime" => {
-                            parameters.btime = Duration::from_millis(tokens.next()?.parse().ok()?);
+                            options.btime = Duration::from_millis(tokens.next()?.parse().ok()?);
                         }
 
                         "winc" => {
-                            parameters.winc = Duration::from_millis(tokens.next()?.parse().ok()?);
+                            options.winc = Duration::from_millis(tokens.next()?.parse().ok()?);
                         }
 
                         "binc" => {
-                            parameters.binc = Duration::from_millis(tokens.next()?.parse().ok()?);
+                            options.binc = Duration::from_millis(tokens.next()?.parse().ok()?);
                         }
 
                         "movetime" => {
-                            parameters.movetime =
-                                Duration::from_millis(tokens.next()?.parse().ok()?);
+                            options.movetime = Duration::from_millis(tokens.next()?.parse().ok()?);
                         }
 
-                        "infinite" => parameters.infinite = true,
+                        "infinite" => options.infinite = true,
 
                         "depth" => {
-                            parameters.depth = tokens.next()?.parse().ok()?;
+                            options.depth = tokens.next()?.parse().ok()?;
                         }
 
                         "nodes" => {
-                            parameters.nodes = tokens.next()?.parse().ok()?;
+                            options.nodes = tokens.next()?.parse().ok()?;
                         }
 
                         _ => return None,
                     }
                 }
 
-                Self::Go(parameters)
+                Self::Go(options)
             }
 
             "stop" => Self::Stop,
