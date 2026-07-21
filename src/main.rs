@@ -1,4 +1,5 @@
 mod display;
+mod engine;
 mod evaluate;
 mod ordering;
 mod pv;
@@ -6,7 +7,7 @@ mod search;
 mod uci;
 
 use crate::display::display_board;
-use crate::search::Searcher;
+use crate::engine::Engine;
 use crate::uci::Uci;
 use cozy_chess::util::display_uci_move;
 use std::io::{BufRead, stdin};
@@ -14,7 +15,7 @@ use std::process::exit;
 
 fn main() {
     let mut chess960 = false;
-    let mut searcher = Searcher::new();
+    let mut engine = Engine::new();
 
     for line in stdin().lock().lines() {
         if let Some(command) = Uci::parse(&line.expect("Should be able to read line"), chess960) {
@@ -47,11 +48,11 @@ fn main() {
                     })();
                 }
 
-                Uci::Position(board, moves) => searcher.set_position(board, moves),
+                Uci::Position(board, moves) => engine.set_position(board, moves),
 
-                Uci::Go(options) => searcher.best_move(options, |best| {
-                    let mv = match best {
-                        Some((board, mv)) => &display_uci_move(board, mv).to_string(),
+                Uci::Go(options) => engine.best_move(options, |mv| {
+                    let mv = match mv {
+                        Some(mv) => &display_uci_move(engine.board(), mv).to_string(),
                         None => "(none)",
                     };
 
@@ -62,7 +63,7 @@ fn main() {
 
                 Uci::Quit => exit(0),
 
-                Uci::D => display_board(searcher.board()),
+                Uci::D => display_board(engine.board()),
 
                 Uci::Bench(_depth) => todo!(),
             }

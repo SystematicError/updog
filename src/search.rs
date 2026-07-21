@@ -39,51 +39,25 @@ impl Default for SearchOptions {
     }
 }
 
-pub struct Searcher {
-    thread: SearchThread,
-}
+pub fn deepen(board: &Board, options: SearchOptions) -> Option<Move> {
+    let mut pv_line = PVLine::new();
 
-impl Searcher {
-    pub fn new() -> Self {
-        Self {
-            thread: SearchThread::default(),
-        }
+    for depth in 1..=options.depth {
+        let mut info = SearchInfo::new();
+        let score = search(board, &mut pv_line, &mut info, depth);
+
+        println!(
+            "info depth {depth} nodes {} score {} pv {}",
+            info.nodes,
+            score.display(),
+            pv_line.display(board)
+        );
+
+        // NOTE: May not be necessary, since pv lines are constructed form the root onwards
+        pv_line.clear();
     }
 
-    pub fn board(&self) -> &Board {
-        &self.thread.board
-    }
-
-    pub fn set_position(&mut self, mut board: Board, moves: Vec<Move>) {
-        for mv in moves {
-            board.play_unchecked(mv);
-        }
-
-        self.thread.set_position(board)
-    }
-
-    pub fn best_move(
-        &mut self,
-        options: SearchOptions,
-        on_complete: impl FnOnce(Option<(&Board, Move)>),
-    ) {
-        on_complete(self.deepen(options).map(|mv| (self.board(), mv)));
-    }
-
-    fn deepen(&mut self, options: SearchOptions) -> Option<Move> {
-        for depth in 1..=options.depth {
-            let score = self.thread.search(depth);
-
-            println!(
-                "info depth {depth} nodes {} score {} pv {}",
-                self.thread.info.nodes,
-                score.display(),
-                self.thread.pv_line.display(&self.thread.board)
-            );
-        }
-
-        self.thread.pv_line.first()
-    }
+    pv_line.first()
 }
 
 struct SearchInfo {
@@ -94,71 +68,29 @@ impl SearchInfo {
     fn new() -> Self {
         Self { nodes: 0 }
     }
+}
 
-    fn reset(&mut self) {
-        self.nodes = 0;
+fn search(board: &Board, pv_line: &mut PVLine, info: &mut SearchInfo, depth: Ply) -> Evaluation {
+    info.nodes += 1;
+
+    if depth == 0 {
+        return evaluate(board);
     }
-}
 
-struct SearchThread {
-    board: Board,
-    pv_line: PVLine,
-    info: SearchInfo,
-}
+    let mut best_score = -Evaluation::INFINITY;
+    let new_line = &mut PVLine::new();
 
-impl SearchThread {
-    fn new(board: Board) -> Self {
-        Self {
-            board,
-            pv_line: PVLine::new(),
-            info: SearchInfo::new(),
+    for mv in generate_ordered_moves(board) {
+        let mut new_board = board.clone();
+        new_board.play_unchecked(mv);
+
+        let score = -search(&new_board, new_line, info, depth - 1);
+
+        if score > best_score {
+            best_score = score;
+            pv_line.extend(mv, new_line);
         }
     }
 
-    fn set_position(&mut self, board: Board) {
-        self.board = board;
-    }
-
-    fn search(&mut self, depth: Ply) -> Evaluation {
-        self.pv_line.clear();
-        self.info.reset();
-
-        Self::negamax(&self.board, &mut self.pv_line, &mut self.info, depth)
-    }
-
-    fn negamax(
-        board: &Board,
-        pv_line: &mut PVLine,
-        info: &mut SearchInfo,
-        depth: Ply,
-    ) -> Evaluation {
-        info.nodes += 1;
-
-        if depth == 0 {
-            return evaluate(board);
-        }
-
-        let mut best_score = -Evaluation::INFINITY;
-        let new_line = &mut PVLine::new();
-
-        for mv in generate_ordered_moves(board) {
-            let mut new_board = board.clone();
-            new_board.play_unchecked(mv);
-
-            let score = -Self::negamax(&new_board, new_line, info, depth - 1);
-
-            if score > best_score {
-                best_score = score;
-                pv_line.extend(mv, new_line);
-            }
-        }
-
-        best_score
-    }
-}
-
-impl Default for SearchThread {
-    fn default() -> Self {
-        Self::new(Board::default())
-    }
+    best_score
 }
