@@ -50,16 +50,16 @@ fn main() {
 
                 Uci::Position(board, moves) => engine.set_position(board, moves),
 
-                Uci::Go(options) => engine.best_move(options, |mv| {
-                    let mv = match mv {
-                        Some(mv) => &display_uci_move(engine.board(), mv).to_string(),
+                Uci::Go(options) => engine.best_move(options, |best| {
+                    let mv = match best {
+                        Some((board, mv)) => &display_uci_move(&board, mv).to_string(),
                         None => "(none)",
                     };
 
                     println!("bestmove {mv}");
                 }),
 
-                Uci::Stop => todo!(),
+                Uci::Stop => engine.stop(),
 
                 Uci::Quit => exit(0),
 

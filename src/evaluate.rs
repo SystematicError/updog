@@ -5,12 +5,14 @@ pub type Evaluation = i32;
 
 pub trait EvaluationUtils {
     const INFINITY: Self;
+    const DRAW: Self;
 
     fn display(self) -> impl fmt::Display;
 }
 
 impl EvaluationUtils for Evaluation {
     const INFINITY: Self = Self::MAX;
+    const DRAW: Self = 0;
 
     fn display(self) -> impl fmt::Display {
         EvaluationDisplay(self)
