@@ -41,9 +41,9 @@ impl Default for SearchOptions {
 
 pub fn deepen(board: &Board, options: SearchOptions) -> Option<Move> {
     let mut pv_line = PVLine::new();
+    let mut info = SearchInfo::new();
 
     for depth in 1..=options.depth {
-        let mut info = SearchInfo::new();
         let score = search(board, &mut pv_line, &mut info, depth);
 
         println!(
