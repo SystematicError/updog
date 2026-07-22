@@ -1,156 +1,138 @@
 use crate::evaluate::{Evaluation, EvaluationUtils, evaluate};
-use crate::principal_variation::PVLine;
-use cozy_chess::{Board, GameStatus, Move, Piece};
+use crate::ordering::generate_ordered_moves;
+use crate::pv::PVLine;
+use cozy_chess::{Board, Move};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
 pub type Ply = u8;
 
-struct SearchInfo {
+pub struct SearchOptions {
+    // Standard clock timing
+    pub wtime: Duration,
+    pub btime: Duration,
+    pub winc: Duration,
+    pub binc: Duration,
+
+    // Other timing options
+    pub movetime: Duration,
+    pub infinite: bool,
+
+    // Search restrictions
+    pub depth: Ply,
     pub nodes: usize,
 }
 
-impl SearchInfo {
-    pub fn new() -> Self {
-        Self { nodes: 0 }
+impl Default for SearchOptions {
+    fn default() -> Self {
+        Self {
+            wtime: Duration::ZERO,
+            btime: Duration::ZERO,
+            winc: Duration::ZERO,
+            binc: Duration::ZERO,
+
+            movetime: Duration::ZERO,
+            infinite: false,
+
+            depth: Ply::MAX,
+            nodes: usize::MAX,
+        }
     }
 }
 
-pub fn deepen(board: &Board, history: &mut Vec<u64>, pv_line: &mut PVLine) -> Option<Move> {
-    for depth in 1..=4 {
-        pv_line.clear();
-        let info = &mut SearchInfo::new();
+pub fn deepen(
+    board: Board,
+    options: SearchOptions,
+    stop: Arc<AtomicBool>,
+) -> Option<(Board, Move)> {
+    stop.store(false, Ordering::Release);
 
-        let score = negamax(
-            board,
-            history,
-            pv_line,
-            info,
-            -Evaluation::INFINITY,
-            Evaluation::INFINITY,
-            depth,
-            0,
-        );
+    let mut best_move = None;
+
+    let mut pv_line = PVLine::new();
+    let mut info = SearchInfo::new();
+
+    for depth in 1..=options.depth {
+        let score = search(&board, &mut pv_line, &mut info, &stop, depth);
+
+        // Discard results if the iteration was stoppped
+        if info.stopped {
+            break;
+        }
+
+        best_move = pv_line.first();
 
         println!(
-            "info depth {} score {} nodes {} pv {}",
-            depth,
-            score.display_uci(),
+            "info depth {depth} nodes {} score {} pv {}",
             info.nodes,
-            pv_line
-                .moves()
-                .iter()
-                .map(|&mv| cozy_chess::util::display_uci_move(board, mv).to_string())
-                .collect::<Vec<_>>()
-                .join(" "),
+            score.display(),
+            pv_line.display(&board)
         );
+
+        // NOTE: May not be necessary, since pv lines are constructed form the root onwards
+        pv_line.clear();
+
+        if stop.load(Ordering::Acquire) {
+            break;
+        }
     }
 
-    pv_line.first()
+    best_move.map(|mv| (board, mv))
 }
 
-fn negamax(
+struct SearchInfo {
+    nodes: usize,
+    stopped: bool,
+}
+
+impl SearchInfo {
+    fn new() -> Self {
+        Self {
+            nodes: 0,
+            stopped: false,
+        }
+    }
+}
+
+const STOP_CHECK_FREQUENCY: usize = 1024;
+
+fn search(
     board: &Board,
-    history: &mut Vec<u64>,
     pv_line: &mut PVLine,
     info: &mut SearchInfo,
-    mut alpha: Evaluation,
-    beta: Evaluation,
+    stop: &Arc<AtomicBool>,
     depth: Ply,
-    ply: Ply,
 ) -> Evaluation {
     info.nodes += 1;
-
-    match game_status(board, history) {
-        GameStatus::Won => return Evaluation::mated_in(ply),
-        GameStatus::Drawn => return Evaluation::DRAWN,
-        GameStatus::Ongoing => {}
-    }
 
     if depth == 0 {
         return evaluate(board);
     }
 
-    let mut best_score = -Evaluation::MAX;
+    if info.nodes.is_multiple_of(STOP_CHECK_FREQUENCY) && stop.load(Ordering::Acquire) {
+        info.stopped = true;
+        return Evaluation::DRAW;
+    }
+
+    let mut best_score = -Evaluation::INFINITY;
     let new_line = &mut PVLine::new();
 
-    board.generate_moves(|moves| {
-        for mv in moves {
-            let mut new_board = board.clone();
-            new_board.play_unchecked(mv);
-
-            history.push(new_board.hash());
-            let score = -negamax(
-                &new_board,
-                history,
-                new_line,
-                info,
-                -beta,
-                -alpha,
-                depth - 1,
-                ply + 1,
-            );
-            history.pop();
-
-            if score > best_score {
-                best_score = score;
-                pv_line.extend(mv, &new_line);
-
-                if score > alpha {
-                    alpha = score;
-                }
-            }
-
-            if score >= beta {
-                return true;
-            }
+    for mv in generate_ordered_moves(board) {
+        if info.stopped {
+            return Evaluation::DRAW;
         }
 
-        false
-    });
+        let mut new_board = board.clone();
+        new_board.play_unchecked(mv);
+
+        let score = -search(&new_board, new_line, info, stop, depth - 1);
+
+        if score > best_score {
+            best_score = score;
+            pv_line.extend(mv, new_line);
+        }
+    }
 
     best_score
-}
-
-fn game_status(board: &Board, history: &mut Vec<u64>) -> GameStatus {
-    let status = board.status();
-
-    if status != GameStatus::Ongoing {
-        return status;
-    }
-
-    // Threefold repetition
-
-    let current_hash = board.hash();
-
-    let repetitions = history
-        .iter()
-        .rev()
-        .take(board.halfmove_clock() as usize + 1)
-        .step_by(2)
-        .filter(|&&hash| hash == current_hash)
-        .count();
-
-    if repetitions >= 3 {
-        return GameStatus::Drawn;
-    }
-
-    // Insufficient material
-
-    // NOTE: Functionally correct, but SPRT indicates that the engine gains no strength with this check
-    // TODO: Test this change later when the engine can do more deeper searches
-
-    let rooks = board.pieces(Piece::Rook);
-    let queens = board.pieces(Piece::Queen);
-    let pawns = board.pieces(Piece::Pawn);
-
-    let insufficient = match board.occupied().len() {
-        2 => true,
-        3 => (rooks | queens | pawns).is_empty(),
-        _ => false,
-    };
-
-    if insufficient {
-        return GameStatus::Drawn;
-    }
-
-    GameStatus::Ongoing
 }

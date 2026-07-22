@@ -27,7 +27,6 @@
         devShells.default = with pkgs;
           mkShell {
             buildInputs = [
-              fastchess
               rust-bin.stable.latest.default
             ];
           };

@@ -20,8 +20,8 @@ pub fn display_board(board: &Board) {
                 }
                 .to_string();
 
-                if let Some(Color::White) = board.color_on(square) {
-                    piece = piece.to_uppercase()
+                if board.color_on(square) == Some(Color::White) {
+                    piece = piece.to_uppercase();
                 }
 
                 piece
@@ -46,15 +46,15 @@ pub fn display_board(board: &Board) {
 
     println!();
 
-    println!("Hash: {:X}", board.hash());
-
+    println!("FEN: {board}");
+    println!("Hash: {:x}", board.hash());
     println!(
         "Checkers: {}",
         board
             .checkers()
             .iter()
-            .map(|square| format!("{:?}", square))
+            .map(|square| square.to_string())
             .collect::<Vec<_>>()
             .join(" ")
-    )
+    );
 }
