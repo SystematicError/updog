@@ -38,8 +38,14 @@ fn main() {
                     (|| {
                         match name.as_str() {
                             "UCI_Chess960" => chess960 = value?.parse().ok()?,
-                            "Threads" => todo!(),
-                            "Hash" => todo!(),
+
+                            "Threads" => {
+                                // TODO: Implement threads option
+                            }
+
+                            "Hash" => {
+                                // TODO: Implement hash option
+                            }
 
                             _ => {}
                         }
