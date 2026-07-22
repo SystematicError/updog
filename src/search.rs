@@ -118,7 +118,14 @@ fn search(
     let mut best_score = -Evaluation::INFINITY;
     let new_line = &mut PVLine::new();
 
-    for mv in generate_ordered_moves(board) {
+    let moves = generate_ordered_moves(board);
+
+    // HACK: Store best move in forced mate lines
+    if moves.is_empty() {
+        return best_score + 1;
+    }
+
+    for mv in moves {
         if info.stopped {
             return Evaluation::DRAW;
         }
