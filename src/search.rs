@@ -1,6 +1,7 @@
 use crate::evaluate::{Evaluation, EvaluationUtils, evaluate};
 use crate::ordering::generate_ordered_moves;
 use crate::pv::PVLine;
+use crate::time::TimeManager;
 use crate::uci::{SearchOptions, TimeOptions};
 use cozy_chess::{Board, Move};
 use std::sync::Arc;
@@ -22,9 +23,10 @@ pub fn deepen(
 
     let mut pv_line = PVLine::new();
     let mut info = SearchInfo::new();
+    let time_manager = time_options.manager(&board);
 
     for depth in 1..=search_options.depth.unwrap_or(Ply::MAX) {
-        let score = search(&board, &mut pv_line, &mut info, &stop, depth);
+        let score = search(&board, &mut pv_line, &mut info, &time_manager, &stop, depth);
 
         // Discard results if the iteration was stoppped
         if info.stopped {
@@ -43,7 +45,7 @@ pub fn deepen(
         // NOTE: May not be necessary, since pv lines are constructed form the root onwards
         pv_line.clear();
 
-        if stop.load(Ordering::Acquire) {
+        if time_manager.stopped() || stop.load(Ordering::Acquire) {
             break;
         }
     }
@@ -78,6 +80,7 @@ fn search(
     board: &Board,
     pv_line: &mut PVLine,
     info: &mut SearchInfo,
+    time_manager: &TimeManager,
     stop: &Arc<AtomicBool>,
     depth: Ply,
 ) -> Evaluation {
@@ -87,7 +90,9 @@ fn search(
         return evaluate(board);
     }
 
-    if info.nodes.is_multiple_of(STOP_CHECK_FREQUENCY) && stop.load(Ordering::Acquire) {
+    if info.nodes.is_multiple_of(STOP_CHECK_FREQUENCY)
+        && (time_manager.stopped() || stop.load(Ordering::Acquire))
+    {
         info.stopped = true;
         return Evaluation::DRAW;
     }
@@ -110,7 +115,7 @@ fn search(
         let mut new_board = board.clone();
         new_board.play_unchecked(mv);
 
-        let score = -search(&new_board, new_line, info, stop, depth - 1);
+        let score = -search(&new_board, new_line, info, time_manager, stop, depth - 1);
 
         if score > best_score {
             best_score = score;

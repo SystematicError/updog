@@ -4,6 +4,7 @@ mod evaluate;
 mod ordering;
 mod pv;
 mod search;
+mod time;
 mod uci;
 
 use crate::display::display_board;
