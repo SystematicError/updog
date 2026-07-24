@@ -1,4 +1,4 @@
-use crate::search::{Ply, SearchOptions};
+use crate::search::Ply;
 use cozy_chess::util::parse_uci_move;
 use cozy_chess::{Board, Move};
 use std::time::Duration;
@@ -10,13 +10,28 @@ pub enum Uci {
     NewGame,
     SetOption(String, Option<String>),
     Position(Board, Vec<Move>),
-    Go(SearchOptions),
+    Go(TimeOptions, SearchOptions),
     Stop,
     Quit,
 
     // Non standard commands
     D,
     Bench(Ply),
+}
+
+pub enum TimeOptions {
+    Clock {
+        wtime: Duration,
+        btime: Duration,
+        winc: Duration,
+        binc: Duration,
+    },
+    MoveTime(Duration),
+    Infinite,
+}
+
+pub struct SearchOptions {
+    pub depth: Option<Ply>,
 }
 
 const BENCH_DEFAULT_DEPTH: Ply = 7;
@@ -100,45 +115,58 @@ impl Uci {
             }
 
             "go" => {
-                let mut options = SearchOptions::default();
+                let mut wtime = Duration::ZERO;
+                let mut btime = Duration::ZERO;
+                let mut winc = Duration::ZERO;
+                let mut binc = Duration::ZERO;
+
+                let mut movetime = Duration::ZERO;
+                let mut infinite = false;
+
+                let mut search_options = SearchOptions {
+                    depth: Some(Ply::MAX),
+                };
 
                 while let Some(token) = tokens.next() {
                     match token {
-                        "wtime" => {
-                            options.wtime = Duration::from_millis(tokens.next()?.parse().ok()?);
-                        }
-
-                        "btime" => {
-                            options.btime = Duration::from_millis(tokens.next()?.parse().ok()?);
-                        }
-
-                        "winc" => {
-                            options.winc = Duration::from_millis(tokens.next()?.parse().ok()?);
-                        }
-
-                        "binc" => {
-                            options.binc = Duration::from_millis(tokens.next()?.parse().ok()?);
-                        }
+                        "wtime" => wtime = Duration::from_millis(tokens.next()?.parse().ok()?),
+                        "btime" => btime = Duration::from_millis(tokens.next()?.parse().ok()?),
+                        "winc" => winc = Duration::from_millis(tokens.next()?.parse().ok()?),
+                        "binc" => binc = Duration::from_millis(tokens.next()?.parse().ok()?),
 
                         "movetime" => {
-                            options.movetime = Duration::from_millis(tokens.next()?.parse().ok()?);
+                            movetime = Duration::from_millis(tokens.next()?.parse().ok()?);
                         }
 
-                        "infinite" => options.infinite = true,
+                        "infinite" => infinite = true,
 
-                        "depth" => {
-                            options.depth = tokens.next()?.parse().ok()?;
-                        }
-
-                        "nodes" => {
-                            options.nodes = tokens.next()?.parse().ok()?;
-                        }
+                        "depth" => search_options.depth = Some(tokens.next()?.parse().ok()?),
 
                         _ => return None,
                     }
                 }
 
-                Self::Go(options)
+                // Get rid of default depth limit for infinite searches
+                if infinite {
+                    search_options.depth = None;
+                }
+
+                let time_options = if infinite {
+                    TimeOptions::Infinite
+                } else if movetime != Duration::ZERO {
+                    TimeOptions::MoveTime(movetime)
+                } else if wtime != Duration::ZERO || btime != Duration::ZERO {
+                    TimeOptions::Clock {
+                        wtime,
+                        btime,
+                        winc,
+                        binc,
+                    }
+                } else {
+                    TimeOptions::Infinite
+                };
+
+                Self::Go(time_options, search_options)
             }
 
             "stop" => Self::Stop,

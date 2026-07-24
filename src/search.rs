@@ -1,49 +1,19 @@
 use crate::evaluate::{Evaluation, EvaluationUtils, evaluate};
 use crate::ordering::generate_ordered_moves;
 use crate::pv::PVLine;
+use crate::uci::{SearchOptions, TimeOptions};
 use cozy_chess::{Board, Move};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread::sleep;
 use std::time::Duration;
 
 pub type Ply = u8;
 
-pub struct SearchOptions {
-    // Standard clock timing
-    pub wtime: Duration,
-    pub btime: Duration,
-    pub winc: Duration,
-    pub binc: Duration,
-
-    // Other timing options
-    pub movetime: Duration,
-    pub infinite: bool,
-
-    // Search restrictions
-    pub depth: Ply,
-    pub nodes: usize,
-}
-
-impl Default for SearchOptions {
-    fn default() -> Self {
-        Self {
-            wtime: Duration::ZERO,
-            btime: Duration::ZERO,
-            winc: Duration::ZERO,
-            binc: Duration::ZERO,
-
-            movetime: Duration::ZERO,
-            infinite: false,
-
-            depth: Ply::MAX,
-            nodes: usize::MAX,
-        }
-    }
-}
-
 pub fn deepen(
     board: Board,
-    options: SearchOptions,
+    time_options: TimeOptions,
+    search_options: SearchOptions,
     stop: Arc<AtomicBool>,
 ) -> Option<(Board, Move)> {
     stop.store(false, Ordering::Release);
@@ -53,7 +23,7 @@ pub fn deepen(
     let mut pv_line = PVLine::new();
     let mut info = SearchInfo::new();
 
-    for depth in 1..=options.depth {
+    for depth in 1..=search_options.depth.unwrap_or(Ply::MAX) {
         let score = search(&board, &mut pv_line, &mut info, &stop, depth);
 
         // Discard results if the iteration was stoppped
@@ -75,6 +45,13 @@ pub fn deepen(
 
         if stop.load(Ordering::Acquire) {
             break;
+        }
+    }
+
+    // Only terminate infinite searches when manually stopped
+    if search_options.depth.is_none() {
+        while !stop.load(Ordering::Acquire) {
+            sleep(Duration::from_millis(5));
         }
     }
 

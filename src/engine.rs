@@ -1,4 +1,5 @@
-use crate::search::{SearchOptions, deepen};
+use crate::search::deepen;
+use crate::uci::{SearchOptions, TimeOptions};
 use cozy_chess::{Board, Move};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -31,13 +32,14 @@ impl Engine {
 
     pub fn best_move(
         &self,
-        options: SearchOptions,
+        time_options: TimeOptions,
+        search_options: SearchOptions,
         on_complete: impl FnOnce(Option<(Board, Move)>) + Send + 'static,
     ) {
         let board = self.board.clone();
         let stop = Arc::clone(&self.stop);
 
-        spawn(|| on_complete(deepen(board, options, stop)));
+        spawn(|| on_complete(deepen(board, time_options, search_options, stop)));
     }
 
     pub fn stop(&mut self) {

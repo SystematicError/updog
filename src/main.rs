@@ -56,14 +56,16 @@ fn main() {
 
                 Uci::Position(board, moves) => engine.set_position(board, moves),
 
-                Uci::Go(options) => engine.best_move(options, |best| {
-                    let mv = match best {
-                        Some((board, mv)) => &display_uci_move(&board, mv).to_string(),
-                        None => "(none)",
-                    };
+                Uci::Go(time_options, search_options) => {
+                    engine.best_move(time_options, search_options, |best| {
+                        let mv = match best {
+                            Some((board, mv)) => &display_uci_move(&board, mv).to_string(),
+                            None => "(none)",
+                        };
 
-                    println!("bestmove {mv}");
-                }),
+                        println!("bestmove {mv}");
+                    })
+                }
 
                 Uci::Stop => engine.stop(),
 
