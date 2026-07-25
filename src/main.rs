@@ -32,7 +32,8 @@ fn main() {
 
                 Uci::IsReady => println!("readyok"),
 
-                Uci::NewGame => todo!(),
+                // TODO: Implement ucinewgame command
+                Uci::NewGame => {}
 
                 Uci::SetOption(name, value) => {
                     // TODO: Use try blocks instead of IIFE
