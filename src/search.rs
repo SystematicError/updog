@@ -32,7 +32,16 @@ pub fn deepen<const LOG: bool>(
     let time_manager = time_options.manager(&board);
 
     for depth in 1..=search_options.depth.unwrap_or(Ply::MAX) {
-        let score = search(&board, &mut pv_line, &mut info, &time_manager, &stop, depth);
+        let score = search(
+            &board,
+            &mut pv_line,
+            &mut info,
+            &time_manager,
+            &stop,
+            -Evaluation::INFINITY,
+            Evaluation::INFINITY,
+            depth,
+        );
 
         // Discard results if the iteration was stoppped
         if info.stopped {
@@ -88,12 +97,15 @@ impl SearchInfo {
 
 const STOP_CHECK_FREQUENCY: usize = 1024;
 
+#[allow(clippy::too_many_arguments)]
 fn search(
     board: &Board,
     pv_line: &mut PVLine,
     info: &mut SearchInfo,
     time_manager: &TimeManager,
     stop: &Arc<AtomicBool>,
+    mut alpha: Evaluation,
+    beta: Evaluation,
     depth: Ply,
 ) -> Evaluation {
     info.nodes += 1;
@@ -127,11 +139,28 @@ fn search(
         let mut new_board = board.clone();
         new_board.play_unchecked(mv);
 
-        let score = -search(&new_board, new_line, info, time_manager, stop, depth - 1);
+        let score = -search(
+            &new_board,
+            new_line,
+            info,
+            time_manager,
+            stop,
+            -beta,
+            -alpha,
+            depth - 1,
+        );
 
         if score > best_score {
             best_score = score;
             pv_line.extend(mv, new_line);
+
+            if score > alpha {
+                alpha = score;
+            }
+        }
+
+        if score >= beta {
+            break;
         }
     }
 
