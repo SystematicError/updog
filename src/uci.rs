@@ -16,7 +16,7 @@ pub enum Uci {
 
     // Non standard commands
     D,
-    Bench(Ply),
+    Bench,
 }
 
 pub enum TimeOptions {
@@ -33,8 +33,6 @@ pub enum TimeOptions {
 pub struct SearchOptions {
     pub depth: Option<Ply>,
 }
-
-const BENCH_DEFAULT_DEPTH: Ply = 7;
 
 impl Uci {
     pub fn parse(input: &str, chess960: bool) -> Option<Self> {
@@ -173,11 +171,7 @@ impl Uci {
             "quit" => Self::Quit,
 
             "d" => Self::D,
-
-            "bench" => Self::Bench(match tokens.next() {
-                Some(depth) => depth.parse().ok()?,
-                None => BENCH_DEFAULT_DEPTH,
-            }),
+            "bench" => Self::Bench,
 
             _ => return None,
         };

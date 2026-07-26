@@ -1,3 +1,4 @@
+mod bench;
 mod display;
 mod engine;
 mod evaluate;
@@ -7,6 +8,7 @@ mod search;
 mod time;
 mod uci;
 
+use crate::bench::bench;
 use crate::display::display_board;
 use crate::engine::Engine;
 use crate::uci::Uci;
@@ -59,10 +61,11 @@ fn main() {
                 Uci::Position(board, moves) => engine.set_position(board, moves),
 
                 Uci::Go(time_options, search_options) => {
-                    engine.best_move(time_options, search_options, |best| {
-                        let mv = match best {
-                            Some((board, mv)) => &display_uci_move(&board, mv).to_string(),
-                            None => "(none)",
+                    engine.best_move(time_options, search_options, |result| {
+                        let mv = if let Some(mv) = result.best_move {
+                            &display_uci_move(&result.board, mv).to_string()
+                        } else {
+                            "(none)"
                         };
 
                         println!("bestmove {mv}");
@@ -75,7 +78,12 @@ fn main() {
 
                 Uci::D => display_board(engine.board()),
 
-                Uci::Bench(_depth) => todo!(),
+                Uci::Bench => {
+                    let (nodes, elapsed) = bench();
+                    let nps = nodes as f64 / elapsed.as_secs_f64();
+
+                    println!("{nodes} in {elapsed:#?} ({nps:.0} nps)");
+                }
             }
         }
     }

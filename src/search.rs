@@ -11,12 +11,18 @@ use std::time::Duration;
 
 pub type Ply = u8;
 
-pub fn deepen(
+pub struct SearchResult {
+    pub board: Board,
+    pub best_move: Option<Move>,
+    pub info: SearchInfo,
+}
+
+pub fn deepen<const LOG: bool>(
     board: Board,
     time_options: TimeOptions,
     search_options: SearchOptions,
     stop: Arc<AtomicBool>,
-) -> Option<(Board, Move)> {
+) -> SearchResult {
     stop.store(false, Ordering::Release);
 
     let mut best_move = None;
@@ -35,12 +41,14 @@ pub fn deepen(
 
         best_move = pv_line.first();
 
-        println!(
-            "info depth {depth} nodes {} score {} pv {}",
-            info.nodes,
-            score.display(),
-            pv_line.display(&board)
-        );
+        if LOG {
+            println!(
+                "info depth {depth} nodes {} score {} pv {}",
+                info.nodes,
+                score.display(),
+                pv_line.display(&board)
+            );
+        }
 
         // NOTE: May not be necessary, since pv lines are constructed form the root onwards
         pv_line.clear();
@@ -57,12 +65,16 @@ pub fn deepen(
         }
     }
 
-    best_move.map(|mv| (board, mv))
+    SearchResult {
+        board,
+        best_move,
+        info,
+    }
 }
 
-struct SearchInfo {
-    nodes: usize,
-    stopped: bool,
+pub struct SearchInfo {
+    pub nodes: usize,
+    pub stopped: bool,
 }
 
 impl SearchInfo {
