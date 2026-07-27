@@ -8,12 +8,12 @@ book := shell(f"echo `nix build --no-link --print-out-paths '{{justfile_dir()}}'
 build_bench_executable(branch) := shell(f"nix build --no-link --print-out-paths 'git+file:{{justfile_dir()}}/?ref={{branch}}'") + f"/bin/{{executable_name}}"
 branch_picker := `git branch --format='%(refname:short)' | gum choose`
 
-sprt base_branch exp_branch engine_options sprt_options:
+sprt exp_branch base_branch engine_options sprt_options:
     #!/usr/bin/env bash
     set -euxo pipefail
 
-    base_executable="{{build_bench_executable(base_branch)}}"
     exp_executable="{{build_bench_executable(exp_branch)}}"
+    base_executable="{{build_bench_executable(base_branch)}}"
 
     fastchess \
         -engine cmd="$exp_executable" name="{{exp_branch}} (exp)" \
@@ -26,17 +26,17 @@ sprt base_branch exp_branch engine_options sprt_options:
         -config outname="sprt_{{exp_branch}}_vs_{{base_branch}}.json"
 
 
-    echo "bench" | "$base_executable"
     echo "bench" | "$exp_executable"
+    echo "bench" | "$base_executable"
 
 sprt-stc:
-    just sprt "master" "{{branch_picker}}" "tc=8+0.08" "elo0=0 elo1=3 alpha=0.05 beta=0.05"
+    just sprt "{{branch_picker}}" "master" "tc=8+0.08" "elo0=0 elo1=3 alpha=0.05 beta=0.05"
 
 sprt-ltc:
-    just sprt "master" "{{branch_picker}}" "tc=40+0.4" "elo0=0 elo1=3 alpha=0.05 beta=0.05"
+    just sprt "{{branch_picker}}" "master" "tc=40+0.4" "elo0=0 elo1=3 alpha=0.05 beta=0.05"
 
 sprt-stc-regression:
-    just sprt "master" "{{branch_picker}}" "tc=8+0.08" "elo0=-5 elo1=0 alpha=0.05 beta=0.05"
+    just sprt "{{branch_picker}}" "master" "tc=8+0.08" "elo0=-5 elo1=0 alpha=0.05 beta=0.05"
 
 sprt-ltc-regression:
-    just sprt "master" "{{branch_picker}}" "tc=40+0.4" "elo0=-5 elo1=0 alpha=0.05 beta=0.05"
+    just sprt "{{branch_picker}}" "master" "tc=40+0.4" "elo0=-5 elo1=0 alpha=0.05 beta=0.05"
