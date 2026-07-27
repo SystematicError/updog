@@ -13,10 +13,23 @@ use crate::display::display_board;
 use crate::engine::Engine;
 use crate::uci::Uci;
 use cozy_chess::util::display_uci_move;
+use std::env::args;
 use std::io::{BufRead, stdin};
 use std::process::exit;
 
+pub fn bench_and_display() {
+    let (nodes, elapsed) = bench();
+    let nps = nodes as f64 / elapsed.as_secs_f64();
+
+    println!("{nodes} nodes in {elapsed:#?} ({nps:.0} nps)");
+}
+
 fn main() {
+    if args().nth(1) == Some("bench".to_string()) {
+        bench_and_display();
+        return;
+    }
+
     let mut chess960 = false;
     let mut engine = Engine::new();
 
@@ -78,12 +91,7 @@ fn main() {
 
                 Uci::D => display_board(engine.board()),
 
-                Uci::Bench => {
-                    let (nodes, elapsed) = bench();
-                    let nps = nodes as f64 / elapsed.as_secs_f64();
-
-                    println!("{nodes} in {elapsed:#?} ({nps:.0} nps)");
-                }
+                Uci::Bench => bench_and_display(),
             }
         }
     }
