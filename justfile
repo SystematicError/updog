@@ -23,6 +23,8 @@ sprt base_branch exp_branch engine_options sprt_options:
         -sprt {{sprt_options}} \
         -resign movecount=3 score=400 -draw movenumber=40 movecount=8 score=10 \
         -rounds 100000 -concurrency {{threads}} \
+        -config outname="sprt_{{exp_branch}}_vs_{{base_branch}}.json"
+
 
     echo "bench" | "$base_executable"
     echo "bench" | "$exp_executable"
