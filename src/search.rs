@@ -111,6 +111,7 @@ fn search(
     info.nodes += 1;
 
     if depth == 0 {
+        pv_line.clear();
         return evaluate(board);
     }
 
