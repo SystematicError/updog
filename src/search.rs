@@ -3,7 +3,7 @@ use crate::ordering::generate_ordered_moves;
 use crate::pv::PVLine;
 use crate::time::TimeManager;
 use crate::uci::{SearchOptions, TimeOptions};
-use cozy_chess::{Board, Move};
+use cozy_chess::{Board, GameStatus, Move};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::sleep;
@@ -41,6 +41,7 @@ pub fn deepen<const LOG: bool>(
             -Evaluation::INFINITY,
             Evaluation::INFINITY,
             depth,
+            0,
         );
 
         // Discard results if the iteration was stoppped
@@ -107,6 +108,7 @@ fn search(
     mut alpha: Evaluation,
     beta: Evaluation,
     depth: Ply,
+    ply: Ply,
 ) -> Evaluation {
     info.nodes += 1;
 
@@ -127,9 +129,18 @@ fn search(
 
     let moves = generate_ordered_moves(board);
 
-    // HACK: Store best move in forced mate lines
-    if moves.is_empty() {
-        return best_score + 1;
+    match board.status() {
+        GameStatus::Won => {
+            pv_line.clear();
+            return Evaluation::mated_in(ply);
+        }
+
+        GameStatus::Drawn => {
+            pv_line.clear();
+            return Evaluation::DRAW;
+        }
+
+        GameStatus::Ongoing => {}
     }
 
     for mv in moves {
@@ -149,6 +160,7 @@ fn search(
             -beta,
             -alpha,
             depth - 1,
+            ply + 1,
         );
 
         if score > best_score {

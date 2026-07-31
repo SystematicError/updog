@@ -1,3 +1,4 @@
+use crate::search::Ply;
 use cozy_chess::{Board, Color, Piece};
 use std::fmt;
 
@@ -6,6 +7,10 @@ pub type Evaluation = i32;
 pub trait EvaluationUtils {
     const INFINITY: Self;
     const DRAW: Self;
+    const MATE: Self;
+    const MATED: Self;
+
+    fn mated_in(ply: Ply) -> Self;
 
     fn display(self) -> impl fmt::Display;
 }
@@ -13,6 +18,12 @@ pub trait EvaluationUtils {
 impl EvaluationUtils for Evaluation {
     const INFINITY: Self = Self::MAX;
     const DRAW: Self = 0;
+    const MATE: Self = Self::INFINITY - 1;
+    const MATED: Self = -Self::MATE;
+
+    fn mated_in(ply: Ply) -> Self {
+        Self::MATED + ply as Self
+    }
 
     fn display(self) -> impl fmt::Display {
         EvaluationDisplay(self)
