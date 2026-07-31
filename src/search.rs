@@ -1,5 +1,5 @@
 use crate::evaluate::{Evaluation, EvaluationUtils, evaluate};
-use crate::ordering::generate_ordered_moves;
+use crate::ordering::order_moves;
 use crate::pv::PVLine;
 use crate::time::TimeManager;
 use crate::uci::{SearchOptions, TimeOptions};
@@ -124,12 +124,10 @@ fn search(
         return Evaluation::DRAW;
     }
 
-    let mut best_score = -Evaluation::INFINITY;
-    let new_line = &mut PVLine::new();
+    let mut moves = generate_moves(board);
 
-    let moves = generate_ordered_moves(board);
-
-    match board.status() {
+    // NOTE: Would it be better to check this before the 0 depth check?
+    match game_status(board, moves.is_empty()) {
         GameStatus::Won => {
             pv_line.clear();
             return Evaluation::mated_in(ply);
@@ -142,6 +140,11 @@ fn search(
 
         GameStatus::Ongoing => {}
     }
+
+    order_moves(&mut moves);
+
+    let mut best_score = -Evaluation::INFINITY;
+    let new_line = &mut PVLine::new();
 
     for mv in moves {
         if info.stopped {
@@ -178,4 +181,37 @@ fn search(
     }
 
     best_score
+}
+
+fn generate_moves(board: &Board) -> Vec<Move> {
+    let mut all_moves = Vec::new();
+
+    board.generate_moves(|moves| {
+        all_moves.extend(moves);
+        false
+    });
+
+    all_moves
+}
+
+fn game_status(board: &Board, no_moves: bool) -> GameStatus {
+    if no_moves {
+        if board.checkers().is_empty() {
+            // Stalemates
+            return GameStatus::Drawn;
+        }
+
+        // Checkmates
+        return GameStatus::Won;
+    }
+
+    if board.halfmove_clock() >= 100 {
+        // 50 move rule
+        return GameStatus::Drawn;
+    }
+
+    // TODO: Check 3 fold repetition
+    // TODO: Check insufficient material
+
+    GameStatus::Ongoing
 }
