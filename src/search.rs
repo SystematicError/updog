@@ -1,9 +1,9 @@
 use crate::evaluate::{Evaluation, EvaluationUtils, evaluate};
-use crate::ordering::generate_ordered_moves;
+use crate::ordering::order_moves;
 use crate::pv::PVLine;
 use crate::time::TimeManager;
 use crate::uci::{SearchOptions, TimeOptions};
-use cozy_chess::{Board, Move};
+use cozy_chess::{Board, GameStatus, Move};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::sleep;
@@ -41,6 +41,7 @@ pub fn deepen<const LOG: bool>(
             -Evaluation::INFINITY,
             Evaluation::INFINITY,
             depth,
+            0,
         );
 
         // Discard results if the iteration was stoppped
@@ -107,6 +108,7 @@ fn search(
     mut alpha: Evaluation,
     beta: Evaluation,
     depth: Ply,
+    ply: Ply,
 ) -> Evaluation {
     info.nodes += 1;
 
@@ -122,15 +124,27 @@ fn search(
         return Evaluation::DRAW;
     }
 
+    let mut moves = generate_moves(board);
+
+    // NOTE: Would it be better to check this before the 0 depth check?
+    match game_status(board, moves.is_empty()) {
+        GameStatus::Won => {
+            pv_line.clear();
+            return Evaluation::mated_in(ply);
+        }
+
+        GameStatus::Drawn => {
+            pv_line.clear();
+            return Evaluation::DRAW;
+        }
+
+        GameStatus::Ongoing => {}
+    }
+
+    order_moves(&mut moves);
+
     let mut best_score = -Evaluation::INFINITY;
     let new_line = &mut PVLine::new();
-
-    let moves = generate_ordered_moves(board);
-
-    // HACK: Store best move in forced mate lines
-    if moves.is_empty() {
-        return best_score + 1;
-    }
 
     for mv in moves {
         if info.stopped {
@@ -149,6 +163,7 @@ fn search(
             -beta,
             -alpha,
             depth - 1,
+            ply + 1,
         );
 
         if score > best_score {
@@ -166,4 +181,37 @@ fn search(
     }
 
     best_score
+}
+
+fn generate_moves(board: &Board) -> Vec<Move> {
+    let mut all_moves = Vec::new();
+
+    board.generate_moves(|moves| {
+        all_moves.extend(moves);
+        false
+    });
+
+    all_moves
+}
+
+fn game_status(board: &Board, no_moves: bool) -> GameStatus {
+    if no_moves {
+        if board.checkers().is_empty() {
+            // Stalemates
+            return GameStatus::Drawn;
+        }
+
+        // Checkmates
+        return GameStatus::Won;
+    }
+
+    if board.halfmove_clock() >= 100 {
+        // 50 move rule
+        return GameStatus::Drawn;
+    }
+
+    // TODO: Check 3 fold repetition
+    // TODO: Check insufficient material
+
+    GameStatus::Ongoing
 }
