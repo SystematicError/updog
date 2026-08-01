@@ -34,7 +34,17 @@ struct EvaluationDisplay(Evaluation);
 
 impl fmt::Display for EvaluationDisplay {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        write!(formatter, "cp {}", self.0)?;
+        let mate_bound = Evaluation::MATE - Ply::MAX as Evaluation;
+        let mated_bound = Evaluation::MATED + Ply::MAX as Evaluation;
+
+        if (mate_bound..=Evaluation::MATE).contains(&self.0) {
+            write!(formatter, "mate {}", (Evaluation::MATE - self.0 + 1) / 2)?;
+        } else if (Evaluation::MATED..=mated_bound).contains(&self.0) {
+            write!(formatter, "mate -{}", (self.0 - Evaluation::MATED) / 2)?;
+        } else {
+            write!(formatter, "cp {}", self.0)?;
+        }
+
         Ok(())
     }
 }
