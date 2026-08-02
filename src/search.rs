@@ -19,6 +19,7 @@ pub struct SearchResult {
 
 pub fn deepen<const LOG: bool>(
     board: Board,
+    mut board_hashes: Vec<u64>,
     time_options: TimeOptions,
     search_options: SearchOptions,
     stop: Arc<AtomicBool>,
@@ -34,6 +35,7 @@ pub fn deepen<const LOG: bool>(
     for depth in 1..=search_options.depth.unwrap_or(Ply::MAX) {
         let score = search(
             &board,
+            &mut board_hashes,
             &mut pv_line,
             &mut info,
             &time_manager,
@@ -101,6 +103,7 @@ const STOP_CHECK_FREQUENCY: usize = 1024;
 #[allow(clippy::too_many_arguments)]
 fn search(
     board: &Board,
+    board_hashes: &mut Vec<u64>,
     pv_line: &mut PVLine,
     info: &mut SearchInfo,
     time_manager: &TimeManager,
@@ -127,7 +130,7 @@ fn search(
     let mut moves = generate_moves(board);
 
     // NOTE: Would it be better to check this before the 0 depth check?
-    match game_status(board, moves.is_empty()) {
+    match game_status(board, board_hashes, moves.is_empty()) {
         GameStatus::Won => {
             pv_line.clear();
             return Evaluation::mated_in(ply);
@@ -154,8 +157,10 @@ fn search(
         let mut new_board = board.clone();
         new_board.play_unchecked(mv);
 
+        board_hashes.push(new_board.hash());
         let score = -search(
             &new_board,
+            board_hashes,
             new_line,
             info,
             time_manager,
@@ -165,6 +170,7 @@ fn search(
             depth - 1,
             ply + 1,
         );
+        board_hashes.pop();
 
         if score > best_score {
             best_score = score;
@@ -194,7 +200,7 @@ fn generate_moves(board: &Board) -> Vec<Move> {
     all_moves
 }
 
-fn game_status(board: &Board, no_moves: bool) -> GameStatus {
+fn game_status(board: &Board, board_hashes: &[u64], no_moves: bool) -> GameStatus {
     if no_moves {
         if board.checkers().is_empty() {
             // Stalemates
@@ -210,7 +216,21 @@ fn game_status(board: &Board, no_moves: bool) -> GameStatus {
         return GameStatus::Drawn;
     }
 
-    // TODO: Check 3 fold repetition
+    let current_hash = board_hashes.last().unwrap();
+    let repetitions = board_hashes
+        .iter()
+        .rev()
+        .take(board.halfmove_clock() as usize + 1)
+        .step_by(2)
+        .skip(1)
+        .filter(|&hash| hash == current_hash)
+        .count();
+
+    if repetitions >= 2 {
+        // Threefold repetition
+        return GameStatus::Drawn;
+    }
+
     // TODO: Check insufficient material
 
     GameStatus::Ongoing

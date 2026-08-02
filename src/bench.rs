@@ -67,9 +67,11 @@ pub fn bench() -> (usize, Duration) {
     let nodes: usize = POSITIONS
         .map(|fen| {
             let board = Board::from_fen(fen, false).unwrap();
+            let board_hashes = vec![board.hash()];
 
             deepen::<false>(
                 board,
+                board_hashes,
                 TimeOptions::Infinite,
                 SearchOptions { depth: Some(DEPTH) },
                 Arc::new(AtomicBool::new(false)),
