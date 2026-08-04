@@ -117,7 +117,7 @@ fn search(
 
     if depth == 0 {
         pv_line.clear();
-        return evaluate(board);
+        return quiescence(board, info, -Evaluation::INFINITY, Evaluation::INFINITY);
     }
 
     if info.nodes.is_multiple_of(STOP_CHECK_FREQUENCY)
@@ -127,7 +127,7 @@ fn search(
         return Evaluation::DRAW;
     }
 
-    let mut moves = generate_moves(board);
+    let mut moves = generate_moves::<false>(board);
 
     // NOTE: Would it be better to check this before the 0 depth check?
     match game_status(board, board_hashes, moves.is_empty()) {
@@ -189,10 +189,67 @@ fn search(
     best_score
 }
 
-fn generate_moves(board: &Board) -> Vec<Move> {
+fn quiescence(
+    board: &Board,
+    info: &mut SearchInfo,
+    mut alpha: Evaluation,
+    beta: Evaluation,
+) -> Evaluation {
+    info.nodes += 1;
+
+    // Stand pat
+
+    let mut best_score = evaluate(board);
+
+    if best_score >= beta {
+        return best_score;
+    }
+
+    if best_score > alpha {
+        alpha = best_score
+    }
+
+    let mut moves = generate_moves::<true>(board);
+    order_moves(board, &mut moves);
+
+    for mv in moves {
+        let mut new_board = board.clone();
+        new_board.play_unchecked(mv);
+
+        let score = -quiescence(&new_board, info, -beta, -alpha);
+
+        if score > best_score {
+            best_score = score;
+
+            if score > alpha {
+                alpha = score;
+            }
+        }
+
+        if score >= beta {
+            break;
+        }
+    }
+
+    best_score
+}
+
+fn generate_moves<const CAPTURES_ONLY: bool>(board: &Board) -> Vec<Move> {
     let mut all_moves = Vec::new();
 
+    let enemies = board.colors(!board.side_to_move());
+
     board.generate_moves(|moves| {
+        let moves = if CAPTURES_ONLY {
+            // NOTE: En passant captures not included
+            let mut captures = moves;
+            captures.to &= enemies;
+
+            captures
+        } else {
+            moves
+        };
+
         all_moves.extend(moves);
         false
     });
