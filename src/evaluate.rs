@@ -49,7 +49,7 @@ impl fmt::Display for EvaluationDisplay {
     }
 }
 
-fn piece_value(piece: Piece) -> Evaluation {
+pub fn piece_value(piece: Piece) -> Evaluation {
     match piece {
         Piece::King => 20000,
         Piece::Queen => 900,

@@ -144,7 +144,7 @@ fn search(
         GameStatus::Ongoing => {}
     }
 
-    order_moves(&mut moves);
+    order_moves(board, &mut moves);
 
     let mut best_score = -Evaluation::INFINITY;
     let new_line = &mut PVLine::new();
