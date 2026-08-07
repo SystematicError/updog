@@ -27,15 +27,15 @@ impl Engine {
     }
 
     pub fn set_position(&mut self, mut board: Board, moves: Vec<Move>) {
-        let mut board_hashes = vec![board.hash()];
+        self.board_hashes.clear();
+        self.board_hashes.push(board.hash());
 
         for mv in moves {
             board.play_unchecked(mv);
-            board_hashes.push(board.hash());
+            self.board_hashes.push(board.hash());
         }
 
         self.board = board;
-        self.board_hashes = board_hashes;
     }
 
     pub fn best_move(
