@@ -11,6 +11,7 @@ mod uci;
 use crate::bench::bench;
 use crate::display::display_board;
 use crate::engine::Engine;
+use crate::evaluate::EvaluationUtils;
 use crate::uci::Uci;
 use cozy_chess::util::display_uci_move;
 use std::env::args;
@@ -74,15 +75,28 @@ fn main() {
                 Uci::Position(board, moves) => engine.set_position(board, moves),
 
                 Uci::Go(time_options, search_options) => {
-                    engine.best_move(time_options, search_options, |result| {
-                        let mv = if let Some(mv) = result.best_move {
-                            &display_uci_move(&result.board, mv).to_string()
-                        } else {
-                            "(none)"
-                        };
+                    engine.best_move(
+                        time_options,
+                        search_options,
+                        |result| {
+                            println!(
+                                "info depth {} score {} nodes {} pv {}",
+                                result.depth,
+                                result.score.display(),
+                                result.info.nodes,
+                                result.pv_line.display(result.board)
+                            );
+                        },
+                        |result| {
+                            let mv = if let Some(mv) = result.best_move {
+                                &display_uci_move(result.board, mv).to_string()
+                            } else {
+                                "(none)"
+                            };
 
-                        println!("bestmove {mv}");
-                    })
+                            println!("bestmove {mv}");
+                        },
+                    );
                 }
 
                 Uci::Stop => engine.stop(),

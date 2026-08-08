@@ -1,9 +1,6 @@
-use crate::search::Ply;
-use crate::search::deepen;
-use crate::uci::{SearchOptions, TimeOptions};
+use crate::search::{Ply, SearchHandler, SearchResult, Searcher};
+use crate::uci::SearchOptions;
 use cozy_chess::Board;
-use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
 
 const DEPTH: Ply = 4;
@@ -61,6 +58,16 @@ const POSITIONS: [&str; 50] = [
     "2r2b2/5p2/5k2/p1r1pP2/P2pB3/1P3P2/K1P3R1/7R w - - 23 93",
 ];
 
+struct BenchHandler;
+
+impl SearchHandler for BenchHandler {
+    fn stopped(&self, _nodes: usize) -> bool {
+        false
+    }
+
+    fn handle_result(&self, _result: SearchResult) {}
+}
+
 pub fn bench() -> (usize, Duration) {
     let start = Instant::now();
 
@@ -69,15 +76,12 @@ pub fn bench() -> (usize, Duration) {
             let board = Board::from_fen(fen, false).unwrap();
             let board_hashes = vec![board.hash()];
 
-            deepen::<false>(
-                board,
-                board_hashes,
-                TimeOptions::Infinite,
-                SearchOptions { depth: Some(DEPTH) },
-                Arc::new(AtomicBool::new(false)),
-            )
-            .info
-            .nodes
+            let mut searcher = Searcher::new(board, board_hashes, BenchHandler);
+
+            searcher
+                .deepen(SearchOptions { depth: Some(DEPTH) })
+                .info
+                .nodes
         })
         .iter()
         .sum();

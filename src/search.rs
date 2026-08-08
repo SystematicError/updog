@@ -1,88 +1,12 @@
 use crate::evaluate::{Evaluation, EvaluationUtils, evaluate};
 use crate::ordering::order_moves;
 use crate::pv::PVLine;
-use crate::time::TimeManager;
-use crate::uci::{SearchOptions, TimeOptions};
+use crate::uci::SearchOptions;
 use cozy_chess::{Board, GameStatus, Move};
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::sleep;
 use std::time::Duration;
 
 pub type Ply = u8;
-
-pub struct SearchResult {
-    pub board: Board,
-    pub best_move: Option<Move>,
-    pub info: SearchInfo,
-}
-
-pub fn deepen<const LOG: bool>(
-    board: Board,
-    mut board_hashes: Vec<u64>,
-    time_options: TimeOptions,
-    search_options: SearchOptions,
-    stop: Arc<AtomicBool>,
-) -> SearchResult {
-    stop.store(false, Ordering::Release);
-
-    let mut best_move = None;
-
-    let mut pv_line = PVLine::new();
-    let mut info = SearchInfo::new();
-    let time_manager = time_options.manager(&board);
-
-    for depth in 1..=search_options.depth.unwrap_or(Ply::MAX) {
-        let score = search(
-            &board,
-            &mut board_hashes,
-            &mut pv_line,
-            &mut info,
-            &time_manager,
-            &stop,
-            -Evaluation::INFINITY,
-            Evaluation::INFINITY,
-            depth,
-            0,
-        );
-
-        // Discard results if the iteration was stoppped
-        if info.stopped {
-            break;
-        }
-
-        best_move = pv_line.first();
-
-        if LOG {
-            println!(
-                "info depth {depth} nodes {} score {} pv {}",
-                info.nodes,
-                score.display(),
-                pv_line.display(&board)
-            );
-        }
-
-        // NOTE: May not be necessary, since pv lines are constructed form the root onwards
-        pv_line.clear();
-
-        if time_manager.stopped() || stop.load(Ordering::Acquire) {
-            break;
-        }
-    }
-
-    // Only terminate infinite searches when manually stopped
-    if search_options.depth.is_none() {
-        while !stop.load(Ordering::Acquire) {
-            sleep(Duration::from_millis(5));
-        }
-    }
-
-    SearchResult {
-        board,
-        best_move,
-        info,
-    }
-}
 
 pub struct SearchInfo {
     pub nodes: usize,
@@ -98,7 +22,98 @@ impl SearchInfo {
     }
 }
 
-const STOP_CHECK_FREQUENCY: usize = 1024;
+// TODO: Merge SearchResult and SearchFinalResult together?
+
+pub struct SearchResult<'a> {
+    pub board: &'a Board,
+    pub depth: Ply,
+    pub score: Evaluation,
+    pub info: &'a SearchInfo,
+    pub pv_line: &'a PVLine,
+}
+
+pub struct SearchFinalResult<'a> {
+    pub board: &'a Board,
+    pub best_move: Option<Move>,
+    pub info: SearchInfo,
+}
+
+pub trait SearchHandler {
+    fn stopped(&self, nodes: usize) -> bool;
+    fn handle_result(&self, result: SearchResult);
+}
+
+pub struct Searcher<H: SearchHandler> {
+    board: Board,
+    board_hashes: Vec<u64>,
+    handler: H,
+}
+
+impl<H: SearchHandler> Searcher<H> {
+    pub fn new(board: Board, board_hashes: Vec<u64>, handler: H) -> Self {
+        Self {
+            board,
+            board_hashes,
+            handler,
+        }
+    }
+
+    pub fn deepen(&mut self, search_options: SearchOptions) -> SearchFinalResult<'_> {
+        let mut best_move = None;
+
+        let mut pv_line = PVLine::new();
+        let mut info = SearchInfo::new();
+
+        for depth in 1..=search_options.depth.unwrap_or(Ply::MAX) {
+            let score = search(
+                &self.board,
+                &mut self.board_hashes,
+                &mut pv_line,
+                &mut info,
+                &self.handler,
+                -Evaluation::INFINITY,
+                Evaluation::INFINITY,
+                depth,
+                0,
+            );
+
+            // Discard results if the iteration was stoppped
+            if info.stopped {
+                break;
+            }
+
+            best_move = pv_line.first();
+
+            self.handler.handle_result(SearchResult {
+                board: &self.board,
+                depth,
+                score,
+                info: &info,
+                pv_line: &pv_line,
+            });
+
+            // NOTE: May not be necessary, since pv lines are constructed form the root onwards
+            pv_line.clear();
+
+            if self.handler.stopped(info.nodes) {
+                break;
+            }
+        }
+
+        // Only terminate infinite searches when manually stopped
+        if search_options.depth.is_none() {
+            while !self.handler.stopped(info.nodes) {
+                sleep(Duration::from_millis(5));
+            }
+        }
+
+        SearchFinalResult {
+            board: &self.board,
+            best_move,
+            info,
+        }
+    }
+}
 
 #[allow(clippy::too_many_arguments)]
 fn search(
@@ -106,8 +121,7 @@ fn search(
     board_hashes: &mut Vec<u64>,
     pv_line: &mut PVLine,
     info: &mut SearchInfo,
-    time_manager: &TimeManager,
-    stop: &Arc<AtomicBool>,
+    handler: &impl SearchHandler,
     mut alpha: Evaluation,
     beta: Evaluation,
     depth: Ply,
@@ -120,9 +134,7 @@ fn search(
         return quiescence(board, info, -Evaluation::INFINITY, Evaluation::INFINITY);
     }
 
-    if info.nodes.is_multiple_of(STOP_CHECK_FREQUENCY)
-        && (time_manager.stopped() || stop.load(Ordering::Acquire))
-    {
+    if handler.stopped(info.nodes) {
         info.stopped = true;
         return Evaluation::DRAW;
     }
@@ -147,7 +159,7 @@ fn search(
     order_moves(board, &mut moves);
 
     let mut best_score = -Evaluation::INFINITY;
-    let new_line = &mut PVLine::new();
+    let mut new_line = PVLine::new();
 
     for mv in moves {
         if info.stopped {
@@ -161,10 +173,9 @@ fn search(
         let score = -search(
             &new_board,
             board_hashes,
-            new_line,
+            &mut new_line,
             info,
-            time_manager,
-            stop,
+            handler,
             -beta,
             -alpha,
             depth - 1,
@@ -174,7 +185,7 @@ fn search(
 
         if score > best_score {
             best_score = score;
-            pv_line.extend(mv, new_line);
+            pv_line.extend(mv, &new_line);
 
             if score > alpha {
                 alpha = score;
