@@ -95,14 +95,14 @@ impl<H: SearchHandler> Searcher<H> {
             // NOTE: May not be necessary, since pv lines are constructed form the root onwards
             pv_line.clear();
 
-            if self.handler.stopped(info.nodes) {
+            if self.handler.stopped(0) {
                 break;
             }
         }
 
         // Only terminate infinite searches when manually stopped
         if search_options.depth.is_none() {
-            while !self.handler.stopped(info.nodes) {
+            while !self.handler.stopped(0) {
                 sleep(Duration::from_millis(5));
             }
         }
