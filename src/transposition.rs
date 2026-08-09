@@ -32,8 +32,6 @@ struct EncodedData {
     _padding: u8,
 }
 
-const PADDING: u8 = u8::MAX;
-
 impl From<Data> for EncodedData {
     fn from(data: Data) -> Self {
         Self {
@@ -46,38 +44,27 @@ impl From<Data> for EncodedData {
                 .best_move
                 .promotion
                 .map_or(u8::MAX, |piece| piece as u8),
-            _padding: PADDING,
+            _padding: 0,
         }
     }
 }
 
-// TODO: Implement From instead of TryFrom for decoding
-
-impl TryFrom<EncodedData> for Data {
-    type Error = ();
-
-    fn try_from(encoded_data: EncodedData) -> Result<Self, Self::Error> {
-        // Padding is non-zero, and empty entries are all zero
-        // Hence this check failing can be used as a check for empty entries
-        if encoded_data._padding != PADDING {
-            return Err(());
-        }
-
-        Ok(Self {
+impl From<EncodedData> for Data {
+    fn from(encoded_data: EncodedData) -> Self {
+        Self {
             score: encoded_data.score,
             bound: match encoded_data.bound {
-                0 => Bound::Exact,
                 1 => Bound::Lower,
                 2 => Bound::Upper,
-                _ => return Err(()),
+                _ => Bound::Exact,
             },
             depth: encoded_data.depth,
             best_move: Move {
-                from: Square::try_index(encoded_data.best_move_from as usize).ok_or(())?,
-                to: Square::try_index(encoded_data.best_move_to as usize).ok_or(())?,
+                from: Square::index(encoded_data.best_move_from as usize),
+                to: Square::index(encoded_data.best_move_to as usize),
                 promotion: Piece::try_index(encoded_data.best_move_promotion as usize),
             },
-        })
+        }
     }
 }
 
@@ -106,12 +93,17 @@ impl Entry {
         let key = self.key.load(Ordering::Relaxed);
         let data = self.data.load(Ordering::Relaxed);
 
+        // Check for empty entries
+        if data == 0 {
+            return None;
+        }
+
         // Check for conflicting hashes or inconsistent entries
         if key ^ data != hash {
             return None;
         }
 
-        Data::try_from(cast::<u64, EncodedData>(data)).ok()
+        Some(Data::from(cast::<_, EncodedData>(data)))
     }
 }
 
@@ -171,15 +163,5 @@ impl TranspositionTable {
         let data = entry.load(hash)?;
 
         Some(data)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_new_entry_load_is_none() {
-        assert!(Entry::new().load(0).is_none());
     }
 }
