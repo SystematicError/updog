@@ -1,5 +1,6 @@
 use crate::search::{SearchFinalResult, SearchHandler, SearchResult, Searcher};
 use crate::time::TimeManager;
+use crate::transposition::TranspositionTable;
 use crate::uci::{SearchOptions, TimeOptions};
 use cozy_chess::{Board, Move};
 use std::sync::Arc;
@@ -46,6 +47,7 @@ impl<F: Fn(SearchResult) + Send + 'static> SearchHandler for StandardHandler<F> 
 pub struct Engine {
     board: Board,
     board_hashes: Vec<u64>,
+    transposition_table: Arc<TranspositionTable>,
     stop_flag: Arc<AtomicBool>,
 }
 
@@ -56,6 +58,7 @@ impl Engine {
         Self {
             board_hashes: vec![board.hash()],
             board,
+            transposition_table: Arc::new(TranspositionTable::with_size(16 * 1024 * 1024).unwrap()),
             stop_flag: Arc::new(AtomicBool::new(true)),
         }
     }
@@ -85,6 +88,9 @@ impl Engine {
     ) {
         self.set_stop_flag(false);
 
+        let board = self.board.clone();
+        let board_hashes = self.board_hashes.clone();
+        let transposition_table = Arc::clone(&self.transposition_table);
         let handler = StandardHandler::new(
             &self.board,
             Arc::clone(&self.stop_flag),
@@ -92,7 +98,7 @@ impl Engine {
             handle_result,
         );
 
-        let mut searcher = Searcher::new(self.board.clone(), self.board_hashes.clone(), handler);
+        let mut searcher = Searcher::new(board, board_hashes, transposition_table, handler);
 
         spawn(move || {
             handle_final_result(searcher.deepen(search_options));

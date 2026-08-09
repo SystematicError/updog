@@ -7,12 +7,14 @@ use std::num::{NonZeroUsize, TryFromIntError};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 #[repr(u8)]
+#[derive(Clone, PartialEq)]
 pub enum Bound {
     Exact = 0,
     Lower = 1,
     Upper = 2,
 }
 
+#[derive(Clone)]
 pub struct Data {
     pub score: Evaluation,
     pub bound: Bound,
@@ -127,33 +129,9 @@ impl TranspositionTable {
         hash as usize % self.table.len()
     }
 
-    pub fn set(
-        &self,
-        board: &Board,
-        score: Evaluation,
-        alpha: Evaluation,
-        beta: Evaluation,
-        depth: Ply,
-        best_move: Move,
-    ) {
+    pub fn set(&self, board: &Board, data: Data) {
         let hash = board.hash();
         let entry = &self.table[self.index(hash)];
-
-        let bound = if score <= alpha {
-            Bound::Upper
-        } else if score >= beta {
-            Bound::Lower
-        } else {
-            Bound::Exact
-        };
-
-        let data = Data {
-            score,
-            bound,
-            depth,
-            best_move,
-        };
-
         entry.store(hash, data);
     }
 
@@ -163,5 +141,14 @@ impl TranspositionTable {
         let data = entry.load(hash)?;
 
         Some(data)
+    }
+
+    pub fn clear(&self) {
+        let empty_hash = 0;
+        let empty_data = Data::from(cast::<u64, EncodedData>(0));
+
+        for entry in self.table.iter() {
+            entry.store(empty_hash, empty_data.clone());
+        }
     }
 }
