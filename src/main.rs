@@ -6,6 +6,7 @@ mod ordering;
 mod pv;
 mod search;
 mod time;
+mod transposition;
 mod uci;
 
 use crate::bench::bench;

@@ -2,7 +2,7 @@ use crate::search::Ply;
 use cozy_chess::{Board, Color, Piece, Square};
 use std::fmt;
 
-pub type Evaluation = i32;
+pub type Evaluation = i16;
 
 pub trait EvaluationUtils {
     const INFINITY: Self;
