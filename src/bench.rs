@@ -1,11 +1,11 @@
 use crate::search::{Ply, SearchHandler, SearchResult, Searcher};
 use crate::transposition::TranspositionTable;
 use crate::uci::SearchOptions;
+use crate::{HASH_DEFAULT, MB};
 use cozy_chess::Board;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-const HASH: usize = 16 * 1024 * 1024;
 const DEPTH: Ply = 4;
 
 const POSITIONS: [&str; 50] = [
@@ -72,7 +72,7 @@ impl SearchHandler for BenchHandler {
 }
 
 pub fn bench() -> (usize, Duration) {
-    let transposition_table = Arc::new(TranspositionTable::with_size(HASH).unwrap());
+    let transposition_table = Arc::new(TranspositionTable::with_size(HASH_DEFAULT * MB).unwrap());
 
     let start = Instant::now();
 

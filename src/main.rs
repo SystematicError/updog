@@ -26,6 +26,11 @@ pub fn bench_and_display() {
     println!("{nodes} nodes in {elapsed:#?} ({nps:.0} nps)");
 }
 
+const MB: usize = 1024 * 1024;
+const HASH_DEFAULT: usize = 16;
+const HASH_MIN: usize = 1;
+const HASH_MAX: usize = 64 * 1024;
+
 fn main() {
     if args().nth(1) == Some("bench".to_string()) {
         bench_and_display();
@@ -33,7 +38,8 @@ fn main() {
     }
 
     let mut chess960 = false;
-    let mut engine = Engine::new();
+    let mut engine =
+        Engine::with_table_size(HASH_DEFAULT * MB).expect("Default hash size should be sufficient");
 
     for line in stdin().lock().lines() {
         if let Some(command) = Uci::parse(&line.expect("Should be able to read line"), chess960) {
@@ -41,29 +47,42 @@ fn main() {
                 Uci::Uci => {
                     println!("id name Updog");
                     println!("id author SystematicError");
-                    println!("option name UCI_Chess960 type check default false");
+                    println!(
+                        "option name Hash type spin default {HASH_DEFAULT} min {HASH_MIN} max {HASH_MAX}"
+                    );
+                    println!("option name Clear Hash type button");
                     println!("option name Threads type spin default 1 min 1 max 1");
-                    println!("option name Hash type spin default 1 min 1 max 1");
+                    println!("option name UCI_Chess960 type check default false");
                     println!("uciok");
                 }
 
                 Uci::IsReady => println!("readyok"),
 
-                // TODO: Implement ucinewgame command
-                Uci::NewGame => {}
+                Uci::NewGame => engine.new_game(),
 
-                Uci::SetOption(name, value) => {
+                Uci::SetOption(name, None) => match name.as_str() {
+                    "Clear Hash" => engine.clear_table(),
+                    _ => {}
+                },
+
+                Uci::SetOption(name, Some(value)) => {
                     // TODO: Use try blocks instead of IIFE
                     (|| {
                         match name.as_str() {
-                            "UCI_Chess960" => chess960 = value?.parse().ok()?,
+                            "UCI_Chess960" => chess960 = value.parse().ok()?,
 
                             "Threads" => {
                                 // TODO: Implement threads option
                             }
 
                             "Hash" => {
-                                // TODO: Implement hash option
+                                let size = value.parse().ok()?;
+
+                                if !(HASH_MIN..=HASH_MAX).contains(&size) {
+                                    return None;
+                                }
+
+                                engine.resize_table(size * MB).ok()?;
                             }
 
                             _ => {}
