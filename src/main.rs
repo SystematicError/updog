@@ -1,4 +1,5 @@
 mod bench;
+mod cli;
 mod display;
 mod engine;
 mod evaluate;
@@ -10,12 +11,13 @@ mod transposition;
 mod uci;
 
 use crate::bench::bench;
+use crate::cli::{Cli, Command};
 use crate::display::display_board;
 use crate::engine::Engine;
 use crate::evaluate::EvaluationUtils;
 use crate::uci::Uci;
+use clap::Parser;
 use cozy_chess::util::display_uci_move;
-use std::env::args;
 use std::io::{BufRead, stdin};
 use std::process::exit;
 
@@ -31,12 +33,7 @@ const HASH_DEFAULT: usize = 16;
 const HASH_MIN: usize = 1;
 const HASH_MAX: usize = 64 * 1024;
 
-fn main() {
-    if args().nth(1) == Some("bench".to_string()) {
-        bench_and_display();
-        return;
-    }
-
+fn uci_loop() {
     let mut chess960 = false;
     let mut engine =
         Engine::with_table_size(HASH_DEFAULT * MB).expect("Default hash size should be sufficient");
@@ -128,5 +125,12 @@ fn main() {
                 Uci::Bench => bench_and_display(),
             }
         }
+    }
+}
+
+fn main() {
+    match Cli::parse().command {
+        Some(Command::Bench { depth: _, short: _ }) => bench_and_display(),
+        None => uci_loop(),
     }
 }
