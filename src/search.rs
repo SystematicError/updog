@@ -149,16 +149,14 @@ fn search(
     let alpha_original = alpha;
 
     if ply > 0
-        && let Some(tt_entry) = transposition_table.get(&board)
+        && let Some(tt_entry) = transposition_table.get(board)
         && tt_entry.depth >= depth
-    {
-        if (tt_entry.bound == Bound::Exact)
+        && ((tt_entry.bound == Bound::Exact)
             || (tt_entry.bound == Bound::Lower && tt_entry.score >= beta)
-            || (tt_entry.bound == Bound::Upper && tt_entry.score <= alpha)
-        {
-            pv_line.clear();
-            return tt_entry.score;
-        }
+            || (tt_entry.bound == Bound::Upper && tt_entry.score <= alpha))
+    {
+        pv_line.clear();
+        return tt_entry.score;
     }
 
     if depth == 0 {

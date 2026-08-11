@@ -57,10 +57,11 @@ fn uci_loop() {
 
                 Uci::NewGame => engine.new_game(),
 
-                Uci::SetOption(name, None) => match name.as_str() {
-                    "Clear Hash" => engine.clear_table(),
-                    _ => {}
-                },
+                Uci::SetOption(name, None) => {
+                    if name == "Clear Hash" {
+                        engine.clear_table()
+                    }
+                }
 
                 Uci::SetOption(name, Some(value)) => {
                     // TODO: Use try blocks instead of IIFE
