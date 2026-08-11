@@ -1,8 +1,10 @@
 use crate::evaluate::{Evaluation, EvaluationUtils, evaluate};
 use crate::ordering::order_moves;
 use crate::pv::PVLine;
+use crate::transposition::{Bound, Data, TranspositionTable};
 use crate::uci::SearchOptions;
 use cozy_chess::{Board, GameStatus, Move};
+use std::sync::Arc;
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -46,14 +48,21 @@ pub trait SearchHandler {
 pub struct Searcher<H: SearchHandler> {
     board: Board,
     board_hashes: Vec<u64>,
+    transposition_table: Arc<TranspositionTable>,
     handler: H,
 }
 
 impl<H: SearchHandler> Searcher<H> {
-    pub fn new(board: Board, board_hashes: Vec<u64>, handler: H) -> Self {
+    pub fn new(
+        board: Board,
+        board_hashes: Vec<u64>,
+        transposition_table: Arc<TranspositionTable>,
+        handler: H,
+    ) -> Self {
         Self {
             board,
             board_hashes,
+            transposition_table,
             handler,
         }
     }
@@ -68,6 +77,7 @@ impl<H: SearchHandler> Searcher<H> {
             let score = search(
                 &self.board,
                 &mut self.board_hashes,
+                &self.transposition_table,
                 &mut pv_line,
                 &mut info,
                 &self.handler,
@@ -119,6 +129,7 @@ impl<H: SearchHandler> Searcher<H> {
 fn search(
     board: &Board,
     board_hashes: &mut Vec<u64>,
+    transposition_table: &Arc<TranspositionTable>,
     pv_line: &mut PVLine,
     info: &mut SearchInfo,
     handler: &impl SearchHandler,
@@ -127,7 +138,28 @@ fn search(
     depth: Ply,
     ply: Ply,
 ) -> Evaluation {
+    // TODO: Considering reordering the following:
+    //     1. Transposition table check
+    //     2. Depth == 0 check
+    //     3. Stop check
+    //     4. Game status check
+
     info.nodes += 1;
+
+    let alpha_original = alpha;
+
+    if ply > 0
+        && let Some(tt_entry) = transposition_table.get(&board)
+        && tt_entry.depth >= depth
+    {
+        if (tt_entry.bound == Bound::Exact)
+            || (tt_entry.bound == Bound::Lower && tt_entry.score >= beta)
+            || (tt_entry.bound == Bound::Upper && tt_entry.score <= alpha)
+        {
+            pv_line.clear();
+            return tt_entry.score;
+        }
+    }
 
     if depth == 0 {
         pv_line.clear();
@@ -141,7 +173,6 @@ fn search(
 
     let mut moves = generate_moves::<false>(board);
 
-    // NOTE: Would it be better to check this before the 0 depth check?
     match game_status(board, board_hashes, moves.is_empty()) {
         GameStatus::Won => {
             pv_line.clear();
@@ -173,6 +204,7 @@ fn search(
         let score = -search(
             &new_board,
             board_hashes,
+            transposition_table,
             &mut new_line,
             info,
             handler,
@@ -197,6 +229,24 @@ fn search(
         }
     }
 
+    transposition_table.set(
+        board,
+        Data {
+            score: best_score,
+            bound: if best_score <= alpha_original {
+                Bound::Upper
+            } else if best_score >= beta {
+                Bound::Lower
+            } else {
+                Bound::Exact
+            },
+            depth,
+            best_move: pv_line
+                .first()
+                .expect("PV Line must be populated due to prior mate and draw checks"),
+        },
+    );
+
     best_score
 }
 
@@ -207,6 +257,8 @@ fn quiescence(
     beta: Evaluation,
 ) -> Evaluation {
     info.nodes += 1;
+
+    // TODO: Query transposition table in quiescent search
 
     // Stand pat
 

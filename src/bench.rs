@@ -1,6 +1,9 @@
 use crate::search::{Ply, SearchHandler, SearchResult, Searcher};
+use crate::transposition::TranspositionTable;
 use crate::uci::SearchOptions;
+use crate::{HASH_DEFAULT, MB};
 use cozy_chess::Board;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 const DEPTH: Ply = 4;
@@ -69,14 +72,20 @@ impl SearchHandler for BenchHandler {
 }
 
 pub fn bench() -> (usize, Duration) {
+    let transposition_table = Arc::new(TranspositionTable::with_size(HASH_DEFAULT * MB).unwrap());
+
     let start = Instant::now();
 
     let nodes: usize = POSITIONS
         .map(|fen| {
+            transposition_table.clear();
+
             let board = Board::from_fen(fen, false).unwrap();
             let board_hashes = vec![board.hash()];
+            let transposition_table = Arc::clone(&transposition_table);
 
-            let mut searcher = Searcher::new(board, board_hashes, BenchHandler);
+            let mut searcher =
+                Searcher::new(board, board_hashes, transposition_table, BenchHandler);
 
             searcher
                 .deepen(SearchOptions { depth: Some(DEPTH) })

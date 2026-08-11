@@ -1,7 +1,9 @@
 use crate::search::{SearchFinalResult, SearchHandler, SearchResult, Searcher};
 use crate::time::TimeManager;
+use crate::transposition::TranspositionTable;
 use crate::uci::{SearchOptions, TimeOptions};
 use cozy_chess::{Board, Move};
+use std::num::TryFromIntError;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::spawn;
@@ -46,18 +48,41 @@ impl<F: Fn(SearchResult) + Send + 'static> SearchHandler for StandardHandler<F> 
 pub struct Engine {
     board: Board,
     board_hashes: Vec<u64>,
+    transposition_table: Arc<TranspositionTable>,
     stop_flag: Arc<AtomicBool>,
 }
 
 impl Engine {
-    pub fn new() -> Self {
+    pub fn with_table_size(bytes: usize) -> Result<Self, TryFromIntError> {
         let board = Board::default();
 
-        Self {
+        Ok(Self {
             board_hashes: vec![board.hash()],
             board,
+            transposition_table: Arc::new(TranspositionTable::with_size(bytes)?),
             stop_flag: Arc::new(AtomicBool::new(true)),
-        }
+        })
+    }
+
+    pub fn new_game(&mut self) {
+        let board = Board::default();
+        self.board_hashes.clear();
+        self.board_hashes.push(board.hash());
+        self.board = board;
+
+        self.set_stop_flag(true);
+        self.clear_table();
+    }
+
+    pub fn clear_table(&self) {
+        self.transposition_table.clear();
+    }
+
+    pub fn resize_table(&mut self, bytes: usize) -> Result<(), TryFromIntError> {
+        let new_table = TranspositionTable::with_size(bytes)?;
+        self.transposition_table = Arc::new(new_table);
+
+        Ok(())
     }
 
     pub fn board(&self) -> &Board {
@@ -77,7 +102,7 @@ impl Engine {
     }
 
     pub fn best_move(
-        &mut self,
+        &self,
         time_options: TimeOptions,
         search_options: SearchOptions,
         handle_result: impl Fn(SearchResult) + Send + 'static,
@@ -85,6 +110,9 @@ impl Engine {
     ) {
         self.set_stop_flag(false);
 
+        let board = self.board.clone();
+        let board_hashes = self.board_hashes.clone();
+        let transposition_table = Arc::clone(&self.transposition_table);
         let handler = StandardHandler::new(
             &self.board,
             Arc::clone(&self.stop_flag),
@@ -92,18 +120,18 @@ impl Engine {
             handle_result,
         );
 
-        let mut searcher = Searcher::new(self.board.clone(), self.board_hashes.clone(), handler);
+        let mut searcher = Searcher::new(board, board_hashes, transposition_table, handler);
 
         spawn(move || {
             handle_final_result(searcher.deepen(search_options));
         });
     }
 
-    fn set_stop_flag(&mut self, flag: bool) {
+    fn set_stop_flag(&self, flag: bool) {
         self.stop_flag.store(flag, Ordering::Release);
     }
 
-    pub fn stop(&mut self) {
+    pub fn stop(&self) {
         self.set_stop_flag(true);
     }
 }
