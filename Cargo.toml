@@ -2,6 +2,7 @@
 name = "updog"
 version = "0.1.0"
 edition = "2024"
+description = "Experimental UCI chess engine"
 
 [dependencies]
 arrayvec = "0.7.8"
