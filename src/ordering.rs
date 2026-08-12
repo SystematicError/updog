@@ -1,6 +1,16 @@
-use crate::evaluate::piece_value;
 use cozy_chess::{Board, Color, Move, Piece, Rank, Square};
 use std::cmp::Reverse;
+
+fn piece_value(piece: Piece) -> u8 {
+    match piece {
+        Piece::Pawn => 1,
+        Piece::Knight => 2,
+        Piece::Bishop => 3,
+        Piece::Rook => 4,
+        Piece::Queen => 5,
+        Piece::King => 6,
+    }
+}
 
 fn capture_pair(board: &Board, mv: Move) -> Option<(Piece, Piece)> {
     let attacker = board.piece_on(mv.from).unwrap();
