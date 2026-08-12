@@ -2,10 +2,8 @@ use crate::bench::DEPTH_DEFAULT;
 use crate::search::Ply;
 use clap::Parser;
 
-// TODO: Add about
-
 #[derive(Parser)]
-#[clap(version)]
+#[clap(about, version)]
 pub struct Cli {
     #[clap(subcommand)]
     pub command: Option<Command>,
