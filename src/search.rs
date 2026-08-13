@@ -31,6 +31,7 @@ pub struct SearchResult<'a> {
     pub depth: Ply,
     pub score: Evaluation,
     pub info: &'a SearchInfo,
+    pub hashfull: usize,
     pub pv_line: &'a PVLine,
 }
 
@@ -99,6 +100,7 @@ impl<H: SearchHandler> Searcher<H> {
                 depth,
                 score,
                 info: &info,
+                hashfull: self.transposition_table.len_permille(),
                 pv_line: &pv_line,
             });
 

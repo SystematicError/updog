@@ -98,10 +98,11 @@ fn uci_loop() {
                         search_options,
                         |result| {
                             println!(
-                                "info depth {} score {} nodes {} pv {}",
+                                "info depth {} score {} nodes {} hashfull {} pv {}",
                                 result.depth,
                                 result.score.display(),
                                 result.info.nodes,
+                                result.hashfull,
                                 result.pv_line.display(result.board)
                             );
                         },

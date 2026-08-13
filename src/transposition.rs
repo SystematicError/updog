@@ -91,6 +91,7 @@ impl Entry {
         let data = self.data.load(Ordering::Relaxed);
 
         // Check for empty entries
+        // Same check as `.is_empty()` but avoids an additional load
         if data == 0 {
             return None;
         }
@@ -101,6 +102,10 @@ impl Entry {
         }
 
         Some(Data::from(cast::<_, EncodedData>(data)))
+    }
+
+    fn is_empty(&self) -> bool {
+        self.data.load(Ordering::Relaxed) == 0
     }
 
     fn clear(&self) {
@@ -146,6 +151,23 @@ impl TranspositionTable {
     pub fn clear(&self) {
         for entry in self.table.iter() {
             entry.clear();
+        }
+    }
+
+    pub fn len_permille(&self) -> usize {
+        let capacity = self.table.len();
+
+        let entries = self
+            .table
+            .iter()
+            .take(1000)
+            .filter(|&entry| !entry.is_empty())
+            .count();
+
+        if capacity >= 1000 {
+            entries
+        } else {
+            (entries * 1000) / capacity
         }
     }
 }
