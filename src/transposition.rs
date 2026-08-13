@@ -1,20 +1,19 @@
 use crate::evaluate::Evaluation;
 use crate::search::Ply;
-use bytemuck::{Pod, Zeroable, cast};
+use bytemuck::{Pod, Zeroable, cast, zeroed_slice_box};
 use cozy_chess::{Board, Move, Piece, Square};
 use std::mem::size_of;
 use std::num::{NonZeroUsize, TryFromIntError};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 #[repr(u8)]
-#[derive(Clone, PartialEq)]
+#[derive(PartialEq)]
 pub enum Bound {
     Exact = 0,
     Lower = 1,
     Upper = 2,
 }
 
-#[derive(Clone)]
 pub struct Data {
     pub score: Evaluation,
     pub bound: Bound,
@@ -70,19 +69,15 @@ impl From<EncodedData> for Data {
     }
 }
 
+// Entries use the XOR technique for lockless access and data consistency
+// https://craftychess.com/hyatt/hashing.html
+#[derive(Zeroable)]
 struct Entry {
     key: AtomicU64,
     data: AtomicU64,
 }
 
 impl Entry {
-    fn new() -> Self {
-        Self {
-            key: AtomicU64::new(0),
-            data: AtomicU64::new(0),
-        }
-    }
-
     fn store(&self, hash: u64, data: Data) {
         let data = cast(EncodedData::from(data));
         let key = hash ^ data;
@@ -107,6 +102,11 @@ impl Entry {
 
         Some(Data::from(cast::<_, EncodedData>(data)))
     }
+
+    fn clear(&self) {
+        self.key.store(0, Ordering::Relaxed);
+        self.data.store(0, Ordering::Relaxed);
+    }
 }
 
 pub struct TranspositionTable {
@@ -116,7 +116,7 @@ pub struct TranspositionTable {
 impl TranspositionTable {
     pub fn with_entries(entries: NonZeroUsize) -> Self {
         Self {
-            table: (0..entries.get()).map(|_| Entry::new()).collect(),
+            table: zeroed_slice_box(entries.get()),
         }
     }
 
@@ -144,11 +144,8 @@ impl TranspositionTable {
     }
 
     pub fn clear(&self) {
-        let empty_hash = 0;
-        let empty_data = Data::from(cast::<u64, EncodedData>(0));
-
         for entry in self.table.iter() {
-            entry.store(empty_hash, empty_data.clone());
+            entry.clear();
         }
     }
 }
