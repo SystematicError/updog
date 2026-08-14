@@ -10,7 +10,7 @@ mod time;
 mod transposition;
 mod uci;
 
-use crate::bench::bench;
+use crate::bench::{DEPTH_DEFAULT, bench};
 use crate::cli::{Cli, Command};
 use crate::display::display_board;
 use crate::engine::Engine;
@@ -18,12 +18,19 @@ use crate::evaluate::EvaluationUtils;
 use crate::uci::Uci;
 use clap::Parser;
 use cozy_chess::util::display_uci_move;
+use search::Ply;
 use std::io::{BufRead, stdin};
 use std::process::exit;
 
-pub fn bench_and_display() {
-    let (nodes, elapsed) = bench();
-    let nps = nodes as f64 / elapsed.as_secs_f64();
+pub fn bench_and_display(depth: Ply, short: bool) {
+    let (nodes, elapsed) = bench(depth);
+
+    if short {
+        println!("{nodes}");
+        return;
+    }
+
+    let nps = nodes as f32 / elapsed.as_secs_f32();
 
     println!("{nodes} nodes in {elapsed:#?} ({nps:.0} nps)");
 }
@@ -124,7 +131,7 @@ fn uci_loop() {
 
                 Uci::D => display_board(engine.board()),
 
-                Uci::Bench => bench_and_display(),
+                Uci::Bench => bench_and_display(DEPTH_DEFAULT, false),
             }
         }
     }
@@ -132,7 +139,7 @@ fn uci_loop() {
 
 fn main() {
     match Cli::parse().command {
-        Some(Command::Bench { depth: _, short: _ }) => bench_and_display(),
+        Some(Command::Bench { depth, short }) => bench_and_display(depth, short),
         None => uci_loop(),
     }
 }

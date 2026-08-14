@@ -1,4 +1,4 @@
-use crate::bench::DEPTH;
+use crate::bench::DEPTH_DEFAULT;
 use crate::search::Ply;
 use clap::Parser;
 
@@ -16,7 +16,7 @@ pub enum Command {
     /// Calculate the node count fingerprint for the search algorithm
     Bench {
         /// Depth to search each position to
-        #[arg(default_value_t = DEPTH)]
+        #[arg(default_value_t = DEPTH_DEFAULT)]
         depth: Ply,
 
         /// Print only the node count

@@ -6,7 +6,7 @@ use cozy_chess::Board;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-pub const DEPTH: Ply = 4;
+pub const DEPTH_DEFAULT: Ply = 4;
 
 const POSITIONS: [&str; 50] = [
     "r3k2r/2pb1ppp/2pp1q2/p7/1nP1B3/1P2P3/P2N1PPP/R2QK2R w KQkq a6 0 14",
@@ -71,7 +71,7 @@ impl SearchHandler for BenchHandler {
     fn handle_result(&self, _result: SearchResult) {}
 }
 
-pub fn bench() -> (usize, Duration) {
+pub fn bench(depth: Ply) -> (usize, Duration) {
     let transposition_table = Arc::new(TranspositionTable::with_size(HASH_DEFAULT * MB).unwrap());
 
     let start = Instant::now();
@@ -88,7 +88,7 @@ pub fn bench() -> (usize, Duration) {
                 Searcher::new(board, board_hashes, transposition_table, BenchHandler);
 
             searcher
-                .deepen(SearchOptions { depth: Some(DEPTH) })
+                .deepen(SearchOptions { depth: Some(depth) })
                 .info
                 .nodes
         })
