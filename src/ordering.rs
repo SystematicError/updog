@@ -1,19 +1,10 @@
 use cozy_chess::{Board, Color, Move, Piece, Rank, Square};
 use std::cmp::Reverse;
 
-fn piece_value(piece: Piece) -> u8 {
-    match piece {
-        Piece::Pawn => 1,
-        Piece::Knight => 2,
-        Piece::Bishop => 3,
-        Piece::Rook => 4,
-        Piece::Queen => 5,
-        Piece::King => 6,
-    }
-}
-
 fn capture_pair(board: &Board, mv: Move) -> Option<(Piece, Piece)> {
-    let attacker = board.piece_on(mv.from).unwrap();
+    let attacker = board
+        .piece_on(mv.from)
+        .expect("Generated move must be legal");
 
     let rank = match board.side_to_move() {
         Color::White => Rank::Sixth,
@@ -32,25 +23,29 @@ fn capture_pair(board: &Board, mv: Move) -> Option<(Piece, Piece)> {
     victim.map(|v| (attacker, v))
 }
 
-fn hash_move_key(mv: Move, hash_move: Option<Move>) -> impl Ord {
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+enum OrderingMove<T: Ord> {
+    Hash,
+    Capture(T),
+    Other,
+}
+
+fn ordering_key(board: &Board, mv: Move, hash_move: Option<Move>) -> impl Ord {
+    // Hash move
     if let Some(hash_move) = hash_move
         && hash_move == mv
     {
-        return false;
+        return OrderingMove::Hash;
     }
 
-    true
-}
+    // MVV-LVA
+    if let Some((attacker, victim)) = capture_pair(board, mv) {
+        return OrderingMove::Capture((Reverse(victim), attacker));
+    }
 
-fn mvv_lva_key(board: &Board, mv: Move) -> impl Ord {
-    let (attacker, victim) = match capture_pair(board, mv) {
-        Some(pair) => pair,
-        None => return (Reverse(0), 0),
-    };
-
-    (Reverse(piece_value(victim)), piece_value(attacker))
+    OrderingMove::Other
 }
 
 pub fn order_moves(board: &Board, moves: &mut [Move], hash_move: Option<Move>) {
-    moves.sort_unstable_by_key(|&mv| (hash_move_key(mv, hash_move), mvv_lva_key(board, mv)));
+    moves.sort_unstable_by_key(|&mv| ordering_key(board, mv, hash_move));
 }
