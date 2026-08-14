@@ -150,15 +150,21 @@ fn search(
 
     let alpha_original = alpha;
 
+    let mut hash_move = None;
+
     if ply > 0
-        && let Some(tt_entry) = transposition_table.get(board)
-        && tt_entry.depth >= depth
-        && ((tt_entry.bound == Bound::Exact)
-            || (tt_entry.bound == Bound::Lower && tt_entry.score >= beta)
-            || (tt_entry.bound == Bound::Upper && tt_entry.score <= alpha))
+        && let Some(entry) = transposition_table.get(board)
     {
-        pv_line.clear();
-        return tt_entry.score;
+        if entry.depth >= depth
+            && ((entry.bound == Bound::Exact)
+                || (entry.bound == Bound::Lower && entry.score >= beta)
+                || (entry.bound == Bound::Upper && entry.score <= alpha))
+        {
+            pv_line.clear();
+            return entry.score;
+        }
+
+        hash_move = Some(entry.best_move);
     }
 
     if depth == 0 {
@@ -187,7 +193,7 @@ fn search(
         GameStatus::Ongoing => {}
     }
 
-    order_moves(board, &mut moves);
+    order_moves(board, &mut moves, hash_move);
 
     let mut best_score = -Evaluation::INFINITY;
     let mut new_line = PVLine::new();
@@ -273,7 +279,7 @@ fn quiescence(
     }
 
     let mut moves = generate_moves::<true>(board);
-    order_moves(board, &mut moves);
+    order_moves(board, &mut moves, None);
 
     for mv in moves {
         let mut new_board = board.clone();
