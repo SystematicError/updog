@@ -50,6 +50,7 @@ impl From<Data> for EncodedData {
     }
 }
 
+// Conversion may panic, but guaranteed not to when decoding a valid `Data` struct
 impl From<EncodedData> for Data {
     fn from(encoded_data: EncodedData) -> Self {
         Self {
@@ -155,6 +156,9 @@ impl TranspositionTable {
     }
 
     pub fn len_permille(&self) -> usize {
+        // Keeping track of the entry count introduces some extra reads
+        // Since this is not called often, we estimate this instead
+
         let capacity = self.table.len();
 
         let entries = self

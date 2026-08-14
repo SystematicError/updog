@@ -34,13 +34,15 @@ struct EvaluationDisplay(Evaluation);
 
 impl fmt::Display for EvaluationDisplay {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        let mate_bound = Evaluation::MATE - Ply::MAX as Evaluation;
-        let mated_bound = Evaluation::MATED + Ply::MAX as Evaluation;
+        let mate_range = (Evaluation::MATE - Ply::MAX as Evaluation)..=Evaluation::MATE;
+        let mated_range = Evaluation::MATED..=(Evaluation::MATED + Ply::MAX as Evaluation);
 
-        if (mate_bound..=Evaluation::MATE).contains(&self.0) {
-            write!(formatter, "mate {}", (Evaluation::MATE - self.0 + 1) / 2)?;
-        } else if (Evaluation::MATED..=mated_bound).contains(&self.0) {
-            write!(formatter, "mate -{}", (self.0 - Evaluation::MATED) / 2)?;
+        if mate_range.contains(&self.0) {
+            let moves = (Evaluation::MATE - self.0 + 1) / 2;
+            write!(formatter, "mate {moves}")?;
+        } else if mated_range.contains(&self.0) {
+            let moves = (self.0 - Evaluation::MATED) / 2;
+            write!(formatter, "mate -{moves}")?;
         } else {
             write!(formatter, "cp {}", self.0)?;
         }
@@ -49,7 +51,8 @@ impl fmt::Display for EvaluationDisplay {
     }
 }
 
-// Implements PeSTO's evaluation function
+// Reimplementation of TSCP's implementation of the PeSTO evaluation function
+// https://www.tckerrigan.com/Chess/TSCP/
 
 enum Phase {
     Mid,
@@ -278,6 +281,7 @@ pub fn evaluate(board: &Board) -> Evaluation {
     let phase_mid = phase.min(24);
     let phase_end = 24 - phase_mid;
 
+    // PERF: Is int casting needed for tapared evaluation?
     let score = (score_mid as i32 * phase_mid as i32 + score_end as i32 * phase_end as i32) / 24;
 
     let perspective = match board.side_to_move() {
