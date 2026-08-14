@@ -32,6 +32,16 @@ fn capture_pair(board: &Board, mv: Move) -> Option<(Piece, Piece)> {
     victim.map(|v| (attacker, v))
 }
 
+fn hash_move_key(mv: Move, hash_move: Option<Move>) -> impl Ord {
+    if let Some(hash_move) = hash_move
+        && hash_move == mv
+    {
+        return false;
+    }
+
+    true
+}
+
 fn mvv_lva_key(board: &Board, mv: Move) -> impl Ord {
     let (attacker, victim) = match capture_pair(board, mv) {
         Some(pair) => pair,
@@ -41,6 +51,6 @@ fn mvv_lva_key(board: &Board, mv: Move) -> impl Ord {
     (Reverse(piece_value(victim)), piece_value(attacker))
 }
 
-pub fn order_moves(board: &Board, moves: &mut [Move]) {
-    moves.sort_unstable_by_key(|&mv| mvv_lva_key(board, mv));
+pub fn order_moves(board: &Board, moves: &mut [Move], hash_move: Option<Move>) {
+    moves.sort_unstable_by_key(|&mv| (hash_move_key(mv, hash_move), mvv_lva_key(board, mv)));
 }
