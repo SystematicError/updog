@@ -22,7 +22,7 @@ use search::Ply;
 use std::io::{BufRead, stdin};
 use std::process::exit;
 
-pub fn bench_and_display(depth: Ply, short: bool) {
+fn bench_and_display(depth: Ply, short: bool) {
     let (nodes, elapsed) = bench(depth);
 
     if short {
@@ -46,93 +46,104 @@ fn uci_loop() {
         Engine::with_table_size(HASH_DEFAULT * MB).expect("Default hash size should be sufficient");
 
     for line in stdin().lock().lines() {
-        if let Some(command) = Uci::parse(&line.expect("Should be able to read line"), chess960) {
-            match command {
-                Uci::Uci => {
-                    println!("id name Updog");
-                    println!("id author SystematicError");
-                    println!(
-                        "option name Hash type spin default {HASH_DEFAULT} min {HASH_MIN} max {HASH_MAX}"
-                    );
-                    println!("option name Clear Hash type button");
-                    println!("option name Threads type spin default 1 min 1 max 1");
-                    println!("option name UCI_Chess960 type check default false");
-                    println!("uciok");
+        let command = match Uci::parse(&line.expect("Should be able to read line"), chess960) {
+            Ok(Some(command)) => command,
+
+            // Skip input handling if it is empty or just whitespace
+            Ok(None) => continue,
+
+            // Skip input handling if parsing failed
+            Err(error) => {
+                println!("info string {}", error);
+                continue;
+            }
+        };
+
+        match command {
+            Uci::Uci => {
+                println!("id name Updog");
+                println!("id author SystematicError");
+                println!(
+                    "option name Hash type spin default {HASH_DEFAULT} min {HASH_MIN} max {HASH_MAX}"
+                );
+                println!("option name Clear Hash type button");
+                println!("option name Threads type spin default 1 min 1 max 1");
+                println!("option name UCI_Chess960 type check default false");
+                println!("uciok");
+            }
+
+            Uci::IsReady => println!("readyok"),
+
+            Uci::NewGame => engine.new_game(),
+
+            Uci::SetOption(name, None) => {
+                if name == "Clear Hash" {
+                    engine.clear_table()
                 }
+            }
 
-                Uci::IsReady => println!("readyok"),
+            Uci::SetOption(name, Some(value)) => {
+                // TODO: Use try blocks instead of IIFE
+                (|| {
+                    match name.as_str() {
+                        "UCI_Chess960" => chess960 = value.parse().ok()?,
 
-                Uci::NewGame => engine.new_game(),
-
-                Uci::SetOption(name, None) => {
-                    if name == "Clear Hash" {
-                        engine.clear_table()
-                    }
-                }
-
-                Uci::SetOption(name, Some(value)) => {
-                    // TODO: Use try blocks instead of IIFE
-                    (|| {
-                        match name.as_str() {
-                            "UCI_Chess960" => chess960 = value.parse().ok()?,
-
-                            "Threads" => {
-                                // TODO: Implement threads option
-                            }
-
-                            "Hash" => {
-                                let size = value.parse().ok()?;
-
-                                if !(HASH_MIN..=HASH_MAX).contains(&size) {
-                                    return None;
-                                }
-
-                                engine.resize_table(size * MB).ok()?;
-                            }
-
-                            _ => {}
+                        "Threads" => {
+                            // TODO: Implement threads option
                         }
 
-                        Some(())
-                    })();
-                }
+                        "Hash" => {
+                            let size = value.parse().ok()?;
 
-                Uci::Position(board, moves) => engine.set_position(board, moves),
+                            if !(HASH_MIN..=HASH_MAX).contains(&size) {
+                                return None;
+                            }
 
-                Uci::Go(time_options, search_options) => {
-                    engine.best_move(
-                        time_options,
-                        search_options,
-                        |result| {
-                            println!(
-                                "info depth {} score {} nodes {} hashfull {} pv {}",
-                                result.depth,
-                                result.score.display(),
-                                result.info.nodes,
-                                result.hashfull,
-                                result.pv_line.display(result.board)
-                            );
-                        },
-                        |result| {
-                            let mv = if let Some(mv) = result.best_move {
-                                &display_uci_move(result.board, mv).to_string()
-                            } else {
-                                "(none)"
-                            };
+                            engine.resize_table(size * MB).ok()?;
+                        }
 
-                            println!("bestmove {mv}");
-                        },
-                    );
-                }
+                        _ => {}
+                    }
 
-                Uci::Stop => engine.stop(),
-
-                Uci::Quit => exit(0),
-
-                Uci::D => display_board(engine.board()),
-
-                Uci::Bench => bench_and_display(DEPTH_DEFAULT, false),
+                    Some(())
+                })();
             }
+
+            Uci::Position(board, moves) => engine.set_position(board, moves),
+
+            Uci::Go(time_options, search_options) => {
+                engine.best_move(
+                    time_options,
+                    search_options,
+                    |result| {
+                        println!(
+                            "info depth {} score {} nodes {} hashfull {} pv {}",
+                            result.depth,
+                            result.score.display(),
+                            result.info.nodes,
+                            result.hashfull,
+                            result.pv_line.display(result.board)
+                        );
+                    },
+                    |result| {
+                        let mv = if let Some(mv) = result.best_move {
+                            &display_uci_move(result.board, mv).to_string()
+                        } else {
+                            "(none)"
+                        };
+
+                        println!("bestmove {mv}");
+                    },
+                );
+            }
+
+            Uci::Stop => engine.stop(),
+
+            Uci::Quit => exit(0),
+
+            Uci::D => display_board(engine.board()),
+
+            Uci::Bench => bench_and_display(DEPTH_DEFAULT, false),
         }
     }
 }

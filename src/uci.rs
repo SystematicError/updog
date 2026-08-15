@@ -1,6 +1,8 @@
 use crate::search::Ply;
 use cozy_chess::util::parse_uci_move;
 use cozy_chess::{Board, Move};
+use std::fmt;
+use std::str::SplitWhitespace;
 use std::time::Duration;
 
 #[allow(clippy::enum_variant_names)]
@@ -34,11 +36,53 @@ pub struct SearchOptions {
     pub depth: Option<Ply>,
 }
 
+pub enum UciParseError {
+    ExpectedToken,
+    UnexpectedToken,
+    InvalidFen,
+    IllegalMove,
+    InvalidDuration,
+    InvalidDepth,
+}
+
+impl fmt::Display for UciParseError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            formatter,
+            "UCI parse error: {}",
+            match self {
+                Self::ExpectedToken => "Didn't receive an expected token",
+                Self::UnexpectedToken => "Received an unexpected token",
+                Self::InvalidFen => "Invalid FEN position",
+                Self::IllegalMove => "Illegal move",
+                Self::InvalidDuration => "Invalid value for a time duration",
+                Self::InvalidDepth => "Invalid value for depth",
+            }
+        )?;
+
+        Ok(())
+    }
+}
+
+fn parse_duration(tokens: &mut SplitWhitespace<'_>) -> Result<Duration, UciParseError> {
+    Ok(Duration::from_millis(
+        tokens
+            .next()
+            .ok_or(UciParseError::ExpectedToken)?
+            .parse()
+            .map_err(|_| UciParseError::InvalidDuration)?,
+    ))
+}
+
 impl Uci {
-    pub fn parse(input: &str, chess960: bool) -> Option<Self> {
+    pub fn parse(input: &str, chess960: bool) -> Result<Option<Self>, UciParseError> {
         let mut tokens = input.split_whitespace();
 
-        let command = tokens.next()?;
+        // Return `None` if the input is empty or just whitespace
+        let command = match tokens.next() {
+            Some(command) => command,
+            None => return Ok(None),
+        };
 
         let parsed = match command {
             "uci" => Self::Uci,
@@ -46,14 +90,14 @@ impl Uci {
             "ucinewgame" => Self::NewGame,
 
             "setoption" => {
-                if tokens.next()? != "name" {
-                    return None;
+                if tokens.next().ok_or(UciParseError::ExpectedToken)? != "name" {
+                    return Err(UciParseError::UnexpectedToken);
                 }
 
                 let name: Vec<_> = tokens.by_ref().take_while(|&t| t != "value").collect();
 
                 if name.is_empty() {
-                    return None;
+                    return Err(UciParseError::ExpectedToken);
                 }
 
                 let name = name.join(" ");
@@ -70,44 +114,42 @@ impl Uci {
             }
 
             "position" => {
-                let board = match tokens.next()? {
+                let board = match tokens.next().ok_or(UciParseError::ExpectedToken)? {
                     "startpos" => Board::default(),
 
                     "fen" => {
                         let fen: Vec<_> = tokens.by_ref().take(6).collect();
 
                         if fen.len() != 6 {
-                            return None;
+                            return Err(UciParseError::InvalidFen);
                         }
 
-                        Board::from_fen(&fen.join(" "), chess960).ok()?
+                        Board::from_fen(&fen.join(" "), chess960)
+                            .map_err(|_| UciParseError::InvalidFen)?
                     }
 
-                    _ => return None,
+                    _ => return Err(UciParseError::UnexpectedToken),
                 };
 
                 if let Some(token) = tokens.next()
                     && token != "moves"
                 {
-                    return None;
+                    return Err(UciParseError::UnexpectedToken);
                 }
 
                 let mut moves = Vec::new();
-                let mut current_board = board.clone();
+                let mut new_board = board.clone();
 
-                // Apply all moves, or until a malformed or illegal move is encountered
-                tokens
-                    .by_ref()
-                    .map_while(|mv| {
-                        let mv = parse_uci_move(&current_board, mv).ok()?;
-                        current_board.try_play(mv).ok()?;
-                        moves.push(mv);
-                        Some(())
-                    })
-                    .count();
+                for mv in tokens.by_ref() {
+                    let mv = parse_uci_move(&new_board, mv)
+                        .map_err(|_| UciParseError::UnexpectedToken)?;
 
-                // Consume all tokens after any malformed or illegal move
-                tokens.by_ref().count();
+                    new_board
+                        .try_play(mv)
+                        .map_err(|_| UciParseError::IllegalMove)?;
+
+                    moves.push(mv);
+                }
 
                 Self::Position(board, moves)
             }
@@ -127,20 +169,25 @@ impl Uci {
 
                 while let Some(token) = tokens.next() {
                     match token {
-                        "wtime" => wtime = Duration::from_millis(tokens.next()?.parse().ok()?),
-                        "btime" => btime = Duration::from_millis(tokens.next()?.parse().ok()?),
-                        "winc" => winc = Duration::from_millis(tokens.next()?.parse().ok()?),
-                        "binc" => binc = Duration::from_millis(tokens.next()?.parse().ok()?),
+                        "wtime" => wtime = parse_duration(&mut tokens)?,
+                        "btime" => btime = parse_duration(&mut tokens)?,
+                        "winc" => winc = parse_duration(&mut tokens)?,
+                        "binc" => binc = parse_duration(&mut tokens)?,
 
-                        "movetime" => {
-                            movetime = Duration::from_millis(tokens.next()?.parse().ok()?);
-                        }
-
+                        "movetime" => movetime = parse_duration(tokens.by_ref())?,
                         "infinite" => infinite = true,
 
-                        "depth" => search_options.depth = Some(tokens.next()?.parse().ok()?),
+                        "depth" => {
+                            search_options.depth = Some(
+                                tokens
+                                    .next()
+                                    .ok_or(UciParseError::ExpectedToken)?
+                                    .parse()
+                                    .map_err(|_| UciParseError::InvalidDepth)?,
+                            );
+                        }
 
-                        _ => return None,
+                        _ => return Err(UciParseError::UnexpectedToken),
                     }
                 }
 
@@ -173,14 +220,14 @@ impl Uci {
             "d" => Self::D,
             "bench" => Self::Bench,
 
-            _ => return None,
+            _ => return Err(UciParseError::UnexpectedToken),
         };
 
         // Ensure all tokens have been consumed
         if tokens.next().is_some() {
-            return None;
+            return Err(UciParseError::UnexpectedToken);
         }
 
-        Some(parsed)
+        Ok(Some(parsed))
     }
 }
