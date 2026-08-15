@@ -10,7 +10,7 @@ mod time;
 mod transposition;
 mod uci;
 
-use crate::bench::{DEPTH_DEFAULT, bench};
+use crate::bench::bench;
 use crate::cli::{Cli, Command};
 use crate::display::display_board;
 use crate::engine::Engine;
@@ -143,7 +143,7 @@ fn uci_loop() {
 
             Uci::D => display_board(engine.board()),
 
-            Uci::Bench => bench_and_display(DEPTH_DEFAULT, false),
+            Uci::Bench(depth) => bench_and_display(depth, false),
         }
     }
 }

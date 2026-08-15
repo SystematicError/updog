@@ -1,3 +1,4 @@
+use crate::bench::DEPTH_DEFAULT;
 use crate::search::Ply;
 use cozy_chess::util::parse_uci_move;
 use cozy_chess::{Board, Move};
@@ -18,7 +19,7 @@ pub enum Uci {
 
     // Non standard commands
     D,
-    Bench,
+    Bench(Ply),
 }
 
 pub enum TimeOptions {
@@ -218,7 +219,14 @@ impl Uci {
             "quit" => Self::Quit,
 
             "d" => Self::D,
-            "bench" => Self::Bench,
+            "bench" => {
+                let depth = match tokens.next() {
+                    Some(depth) => depth.parse().map_err(|_| UciParseError::InvalidDepth)?,
+                    None => DEPTH_DEFAULT,
+                };
+
+                Self::Bench(depth)
+            }
 
             _ => return Err(UciParseError::UnexpectedToken),
         };
