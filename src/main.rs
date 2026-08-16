@@ -76,37 +76,44 @@ fn uci_loop() {
 
             Uci::NewGame => engine.new_game(),
 
-            Uci::SetOption(name, None) => {
-                if name == "Clear Hash" {
-                    engine.clear_table()
-                }
-            }
+            Uci::SetOption(name, None) => match name.as_str() {
+                "Clear Hash" => engine.clear_table(),
+                _ => println!("info string UCI handle error: No such valueless option exists"),
+            },
 
             Uci::SetOption(name, Some(value)) => {
                 // TODO: Use try blocks instead of IIFE
-                (|| {
-                    match name.as_str() {
-                        "UCI_Chess960" => chess960 = value.parse().ok()?,
-
-                        "Threads" => {
-                            // TODO: Implement threads option
-                        }
-
-                        "Hash" => {
-                            let size = value.parse().ok()?;
-
-                            if !(HASH_MIN..=HASH_MAX).contains(&size) {
-                                return None;
-                            }
-
-                            engine.resize_table(size * MB).ok()?;
-                        }
-
-                        _ => {}
+                let result = (|| match name.as_str() {
+                    "UCI_Chess960" => {
+                        chess960 = value.parse().map_err(|_| "Failed to parse value")?;
+                        Ok(())
                     }
 
-                    Some(())
+                    "Threads" => {
+                        // TODO: Implement threads option
+                        Ok(())
+                    }
+
+                    "Hash" => {
+                        let size = value.parse().map_err(|_| "Failed to parse value")?;
+
+                        if !(HASH_MIN..=HASH_MAX).contains(&size) {
+                            return Err("Value outside valid range");
+                        }
+
+                        engine
+                            .resize_table(size * MB)
+                            .expect("Default hash size range should be sufficient");
+
+                        Ok(())
+                    }
+
+                    _ => Err("No such option exists"),
                 })();
+
+                if let Err(error) = result {
+                    println!("info string UCI handle error: {}", error);
+                }
             }
 
             Uci::Position(board, moves) => engine.set_position(board, moves),
