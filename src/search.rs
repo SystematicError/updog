@@ -15,15 +15,6 @@ pub struct SearchInfo {
     pub stopped: bool,
 }
 
-impl SearchInfo {
-    fn new() -> Self {
-        Self {
-            nodes: 0,
-            stopped: false,
-        }
-    }
-}
-
 // TODO: Merge SearchResult and SearchFinalResult together?
 
 pub struct SearchResult<'a> {
@@ -72,10 +63,13 @@ impl<H: SearchHandler> Searcher<H> {
         let mut best_move = None;
 
         let mut pv_line = PVLine::new();
-        let mut info = SearchInfo::new();
+        let mut info = SearchInfo {
+            nodes: 0,
+            stopped: false,
+        };
 
         for depth in 1..=search_options.depth.unwrap_or(Ply::MAX) {
-            let score = search(
+            let score = negamax(
                 &self.board,
                 &mut self.board_hashes,
                 &self.transposition_table,
@@ -128,7 +122,7 @@ impl<H: SearchHandler> Searcher<H> {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn search(
+fn negamax(
     board: &Board,
     board_hashes: &mut Vec<u64>,
     transposition_table: &Arc<TranspositionTable>,
@@ -152,6 +146,7 @@ fn search(
 
     let mut hash_move = None;
 
+    // Probe the transposition table
     if ply > 0
         && let Some(entry) = transposition_table.get(board)
     {
@@ -166,6 +161,8 @@ fn search(
 
         hash_move = Some(entry.best_move);
     }
+
+    // Leaf node checks
 
     if depth == 0 {
         pv_line.clear();
@@ -207,7 +204,7 @@ fn search(
         new_board.play_unchecked(mv);
 
         board_hashes.push(new_board.hash());
-        let score = -search(
+        let score = -negamax(
             &new_board,
             board_hashes,
             transposition_table,
@@ -235,6 +232,7 @@ fn search(
         }
     }
 
+    // Store result in the transposition table
     transposition_table.set(
         board,
         Data {
@@ -265,6 +263,8 @@ fn quiescence(
     info.nodes += 1;
 
     // TODO: Query transposition table in quiescent search
+    // TODO: Check check (evasions)
+    // TODO: Check leaf nodes?
 
     // Stand pat
 
@@ -342,14 +342,14 @@ fn game_status(board: &Board, board_hashes: &[u64], no_moves: bool) -> GameStatu
         return GameStatus::Drawn;
     }
 
-    let current_hash = board_hashes.last().unwrap();
+    let current_hash = board.hash();
     let repetitions = board_hashes
         .iter()
         .rev()
         .take(board.halfmove_clock() as usize + 1)
         .step_by(2)
         .skip(1)
-        .filter(|&hash| hash == current_hash)
+        .filter(|&&hash| hash == current_hash)
         .count();
 
     if repetitions >= 2 {

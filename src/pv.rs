@@ -26,7 +26,9 @@ impl PVLine {
     pub fn extend(&mut self, mv: Move, new_line: &Self) {
         self.line.clear();
         self.line.push(mv);
-        self.line.try_extend_from_slice(&new_line.line).unwrap();
+        self.line
+            .try_extend_from_slice(&new_line.line)
+            .expect("PVLine shouldn't exceed max ply");
     }
 
     pub fn display<'a>(&'a self, board: &'a Board) -> impl fmt::Display {
