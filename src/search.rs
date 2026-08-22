@@ -154,7 +154,7 @@ fn negamax<const PV_NODE: bool>(
 
     // Probe the transposition table
     if let Some(entry) = data.transposition_table.get(board) {
-        if ply > 0
+        if !PV_NODE
             && entry.depth >= depth
             && ((entry.bound == Bound::Exact)
                 || (entry.bound == Bound::Lower && entry.score >= beta)
