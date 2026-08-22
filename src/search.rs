@@ -6,7 +6,7 @@ use crate::uci::SearchOptions;
 use cozy_chess::{Board, GameStatus, Move};
 use std::sync::Arc;
 use std::thread::sleep;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 pub type Ply = u8;
 
@@ -22,6 +22,7 @@ pub struct SearchResult<'a> {
     pub depth: Ply,
     pub score: Evaluation,
     pub info: &'a SearchInfo,
+    pub elapsed: Duration,
     pub hashfull: usize,
     pub pv_line: &'a PVLine,
 }
@@ -67,6 +68,7 @@ impl<H: SearchHandler> Searcher<H> {
             nodes: 0,
             stopped: false,
         };
+        let start = Instant::now();
 
         for depth in 1..=search_options.depth.unwrap_or(Ply::MAX) {
             let score = negamax(
@@ -94,6 +96,7 @@ impl<H: SearchHandler> Searcher<H> {
                 depth,
                 score,
                 info: &info,
+                elapsed: start.elapsed(),
                 hashfull: self.transposition_table.len_permille(),
                 pv_line: &pv_line,
             });

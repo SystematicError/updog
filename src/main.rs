@@ -124,10 +124,12 @@ fn uci_loop() {
                     search_options,
                     |result| {
                         println!(
-                            "info depth {} score {} nodes {} hashfull {} pv {}",
+                            "info depth {} score {} nodes {} nps {:.0} time {} hashfull {} pv {}",
                             result.depth,
                             result.score.display(),
                             result.info.nodes,
+                            result.info.nodes as f32 / result.elapsed.as_secs_f32(),
+                            result.elapsed.as_millis(),
                             result.hashfull,
                             result.pv_line.display(result.board)
                         );
