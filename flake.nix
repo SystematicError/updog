@@ -24,11 +24,14 @@
           inherit system overlays;
         };
 
-        rust = pkgs.rust-bin.stable.latest.default;
+        rust = pkgs.rust-bin.stable.latest.default.override {
+          extensions = ["llvm-tools-preview"];
+        };
       in {
         devShells.default = pkgs.mkShell {
           buildInputs = [
             rust
+            pkgs.cargo-pgo
             pkgs.gnumake
           ];
         };
