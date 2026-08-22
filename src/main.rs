@@ -123,13 +123,15 @@ fn uci_loop() {
                     time_options,
                     search_options,
                     |result| {
+                        let elapsed = result.info.start.elapsed();
+
                         println!(
                             "info depth {} score {} nodes {} nps {:.0} time {} hashfull {} pv {}",
                             result.depth,
                             result.score.display(),
                             result.info.nodes,
-                            result.info.nodes as f32 / result.elapsed.as_secs_f32(),
-                            result.elapsed.as_millis(),
+                            result.info.nodes as f32 / elapsed.as_secs_f32(),
+                            elapsed.as_millis(),
                             result.hashfull,
                             result.pv_line.display(result.board)
                         );

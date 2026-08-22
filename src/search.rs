@@ -11,18 +11,16 @@ use std::time::{Duration, Instant};
 pub type Ply = u8;
 
 pub struct SearchInfo {
+    pub start: Instant,
     pub nodes: usize,
     pub stopped: bool,
 }
-
-// TODO: Merge SearchResult and SearchFinalResult together?
 
 pub struct SearchResult<'a> {
     pub board: &'a Board,
     pub depth: Ply,
     pub score: Evaluation,
     pub info: &'a SearchInfo,
-    pub elapsed: Duration,
     pub hashfull: usize,
     pub pv_line: &'a PVLine,
 }
@@ -31,6 +29,13 @@ pub struct SearchFinalResult<'a> {
     pub board: &'a Board,
     pub best_move: Option<Move>,
     pub info: SearchInfo,
+}
+
+struct SearchData<'a, H: SearchHandler> {
+    transposition_table: &'a Arc<TranspositionTable>,
+    board_hashes: &'a mut Vec<u64>,
+    info: &'a mut SearchInfo,
+    handler: &'a H,
 }
 
 pub trait SearchHandler {
@@ -67,17 +72,20 @@ impl<H: SearchHandler> Searcher<H> {
         let mut info = SearchInfo {
             nodes: 0,
             stopped: false,
+            start: Instant::now(),
         };
-        let start = Instant::now();
+        let mut data = SearchData {
+            transposition_table: &self.transposition_table,
+            board_hashes: &mut self.board_hashes,
+            info: &mut info,
+            handler: &self.handler,
+        };
 
         for depth in 1..=search_options.depth.unwrap_or(Ply::MAX) {
             let score = negamax(
                 &self.board,
-                &mut self.board_hashes,
-                &self.transposition_table,
+                &mut data,
                 &mut pv_line,
-                &mut info,
-                &self.handler,
                 -Evaluation::INFINITY,
                 Evaluation::INFINITY,
                 depth,
@@ -85,7 +93,7 @@ impl<H: SearchHandler> Searcher<H> {
             );
 
             // Discard results if the iteration was stoppped
-            if info.stopped {
+            if data.info.stopped {
                 break;
             }
 
@@ -95,8 +103,7 @@ impl<H: SearchHandler> Searcher<H> {
                 board: &self.board,
                 depth,
                 score,
-                info: &info,
-                elapsed: start.elapsed(),
+                info: &data.info,
                 hashfull: self.transposition_table.len_permille(),
                 pv_line: &pv_line,
             });
@@ -124,14 +131,10 @@ impl<H: SearchHandler> Searcher<H> {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn negamax(
     board: &Board,
-    board_hashes: &mut Vec<u64>,
-    transposition_table: &Arc<TranspositionTable>,
+    data: &mut SearchData<impl SearchHandler>,
     pv_line: &mut PVLine,
-    info: &mut SearchInfo,
-    handler: &impl SearchHandler,
     mut alpha: Evaluation,
     beta: Evaluation,
     depth: Ply,
@@ -143,7 +146,7 @@ fn negamax(
     //     3. Stop check
     //     4. Game status check
 
-    info.nodes += 1;
+    data.info.nodes += 1;
 
     let alpha_original = alpha;
 
@@ -151,7 +154,7 @@ fn negamax(
 
     // Probe the transposition table
     if ply > 0
-        && let Some(entry) = transposition_table.get(board)
+        && let Some(entry) = data.transposition_table.get(board)
     {
         if entry.depth >= depth
             && ((entry.bound == Bound::Exact)
@@ -169,17 +172,22 @@ fn negamax(
 
     if depth == 0 {
         pv_line.clear();
-        return quiescence(board, info, -Evaluation::INFINITY, Evaluation::INFINITY);
+        return quiescence(
+            board,
+            data.info,
+            -Evaluation::INFINITY,
+            Evaluation::INFINITY,
+        );
     }
 
-    if handler.stopped(info.nodes) {
-        info.stopped = true;
+    if data.handler.stopped(data.info.nodes) {
+        data.info.stopped = true;
         return Evaluation::DRAW;
     }
 
     let mut moves = generate_moves::<false>(board);
 
-    match game_status(board, board_hashes, moves.is_empty()) {
+    match game_status(board, data.board_hashes, moves.is_empty()) {
         GameStatus::Won => {
             pv_line.clear();
             return Evaluation::mated_in(ply);
@@ -199,27 +207,24 @@ fn negamax(
     let mut new_line = PVLine::new();
 
     for mv in moves {
-        if info.stopped {
+        if data.info.stopped {
             return Evaluation::DRAW;
         }
 
         let mut new_board = board.clone();
         new_board.play_unchecked(mv);
 
-        board_hashes.push(new_board.hash());
+        data.board_hashes.push(new_board.hash());
         let score = -negamax(
             &new_board,
-            board_hashes,
-            transposition_table,
+            data,
             &mut new_line,
-            info,
-            handler,
             -beta,
             -alpha,
             depth - 1,
             ply + 1,
         );
-        board_hashes.pop();
+        data.board_hashes.pop();
 
         if score > best_score {
             best_score = score;
@@ -236,7 +241,7 @@ fn negamax(
     }
 
     // Store result in the transposition table
-    transposition_table.set(
+    data.transposition_table.set(
         board,
         Data {
             score: best_score,
