@@ -153,10 +153,9 @@ fn negamax(
     let mut hash_move = None;
 
     // Probe the transposition table
-    if ply > 0
-        && let Some(entry) = data.transposition_table.get(board)
-    {
-        if entry.depth >= depth
+    if let Some(entry) = data.transposition_table.get(board) {
+        if ply > 0
+            && entry.depth >= depth
             && ((entry.bound == Bound::Exact)
                 || (entry.bound == Bound::Lower && entry.score >= beta)
                 || (entry.bound == Bound::Upper && entry.score <= alpha))
