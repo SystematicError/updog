@@ -32,10 +32,12 @@ pub struct SearchFinalResult<'a> {
 }
 
 struct SearchData<'a, H: SearchHandler> {
-    transposition_table: &'a Arc<TranspositionTable>,
     board_hashes: &'a mut Vec<u64>,
-    info: &'a mut SearchInfo,
+    transposition_table: &'a Arc<TranspositionTable>,
     handler: &'a H,
+    info: &'a mut SearchInfo,
+    best_score: Evaluation,
+    best_move: Option<Move>,
 }
 
 pub trait SearchHandler {
@@ -66,8 +68,6 @@ impl<H: SearchHandler> Searcher<H> {
     }
 
     pub fn deepen(&mut self, search_options: SearchOptions) -> SearchFinalResult<'_> {
-        let mut best_move = None;
-
         let mut pv_line = PVLine::new();
         let mut info = SearchInfo {
             nodes: 0,
@@ -75,10 +75,12 @@ impl<H: SearchHandler> Searcher<H> {
             start: Instant::now(),
         };
         let mut data = SearchData {
-            transposition_table: &self.transposition_table,
             board_hashes: &mut self.board_hashes,
-            info: &mut info,
+            transposition_table: &self.transposition_table,
             handler: &self.handler,
+            info: &mut info,
+            best_score: -Evaluation::INFINITY,
+            best_move: None,
         };
 
         for depth in 1..=search_options.depth.unwrap_or(Ply::MAX) {
@@ -92,12 +94,15 @@ impl<H: SearchHandler> Searcher<H> {
                 0,
             );
 
-            // Discard results if the iteration was stoppped
+            // Skip result handling if the iteration was interrupted
             if data.info.stopped {
                 break;
             }
 
-            best_move = pv_line.first();
+            // Override the best score and move with that of the completed iteration
+            // Important for when an iteration reports a worse score for the position
+            data.best_score = score;
+            data.best_move = pv_line.first();
 
             self.handler.handle_result(SearchResult {
                 board: &self.board,
@@ -125,7 +130,7 @@ impl<H: SearchHandler> Searcher<H> {
 
         SearchFinalResult {
             board: &self.board,
-            best_move,
+            best_move: data.best_move,
             info,
         }
     }
@@ -250,6 +255,12 @@ fn negamax<const PV_NODE: bool>(
         if score > best_score {
             best_score = score;
             pv_line.extend(mv, &new_line);
+
+            // Track the best move across all search iterations
+            if ply == 0 && !data.info.stopped && score > data.best_score {
+                data.best_score = score;
+                data.best_move = Some(mv);
+            }
 
             if score > alpha {
                 alpha = score;
