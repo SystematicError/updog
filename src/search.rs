@@ -82,7 +82,7 @@ impl<H: SearchHandler> Searcher<H> {
         };
 
         for depth in 1..=search_options.depth.unwrap_or(Ply::MAX) {
-            let score = negamax(
+            let score = negamax::<true>(
                 &self.board,
                 &mut data,
                 &mut pv_line,
@@ -131,7 +131,7 @@ impl<H: SearchHandler> Searcher<H> {
     }
 }
 
-fn negamax(
+fn negamax<const PV_NODE: bool>(
     board: &Board,
     data: &mut SearchData<impl SearchHandler>,
     pv_line: &mut PVLine,
@@ -154,7 +154,7 @@ fn negamax(
 
     // Probe the transposition table
     if let Some(entry) = data.transposition_table.get(board) {
-        if ply > 0
+        if !PV_NODE
             && entry.depth >= depth
             && ((entry.bound == Bound::Exact)
                 || (entry.bound == Bound::Lower && entry.score >= beta)
@@ -205,6 +205,8 @@ fn negamax(
     let mut best_score = -Evaluation::INFINITY;
     let mut new_line = PVLine::new();
 
+    let mut first_move = true;
+
     for mv in moves {
         if data.info.stopped {
             return Evaluation::DRAW;
@@ -214,15 +216,35 @@ fn negamax(
         new_board.play_unchecked(mv);
 
         data.board_hashes.push(new_board.hash());
-        let score = -negamax(
-            &new_board,
-            data,
-            &mut new_line,
-            -beta,
-            -alpha,
-            depth - 1,
-            ply + 1,
-        );
+
+        let mut score = -Evaluation::INFINITY;
+
+        // Try a zero window search
+        if !PV_NODE || !first_move {
+            score = -negamax::<false>(
+                &new_board,
+                data,
+                &mut new_line,
+                -(alpha + 1),
+                -alpha,
+                depth - 1,
+                ply + 1,
+            );
+        }
+
+        // Do a full window search on PV nodes or if the zero window search fails
+        if PV_NODE && (first_move || score > alpha) {
+            score = -negamax::<true>(
+                &new_board,
+                data,
+                &mut new_line,
+                -beta,
+                -alpha,
+                depth - 1,
+                ply + 1,
+            );
+        }
+
         data.board_hashes.pop();
 
         if score > best_score {
@@ -237,6 +259,8 @@ fn negamax(
         if score >= beta {
             break;
         }
+
+        first_move = false;
     }
 
     // Store result in the transposition table
