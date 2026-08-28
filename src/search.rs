@@ -27,17 +27,8 @@ pub struct SearchResult<'a> {
 
 pub struct SearchFinalResult<'a> {
     pub board: &'a Board,
-    pub best_move: Option<Move>,
     pub info: SearchInfo,
-}
-
-struct SearchData<'a, H: SearchHandler> {
-    board_hashes: &'a mut Vec<u64>,
-    transposition_table: &'a Arc<TranspositionTable>,
-    handler: &'a H,
-    info: &'a mut SearchInfo,
-    best_score: Evaluation,
-    best_move: Option<Move>,
+    pub best_move: Option<Move>,
 }
 
 pub trait SearchHandler {
@@ -69,24 +60,22 @@ impl<H: SearchHandler> Searcher<H> {
 
     pub fn deepen(&mut self, search_options: SearchOptions) -> SearchFinalResult<'_> {
         let mut pv_line = PVLine::new();
-        let mut info = SearchInfo {
-            nodes: 0,
-            stopped: false,
-            start: Instant::now(),
-        };
-        let mut data = SearchData {
+        let mut thread = SearchThread {
             board_hashes: &mut self.board_hashes,
             transposition_table: &self.transposition_table,
             handler: &self.handler,
-            info: &mut info,
+            info: SearchInfo {
+                nodes: 0,
+                stopped: false,
+                start: Instant::now(),
+            },
             best_score: -Evaluation::INFINITY,
             best_move: None,
         };
 
         for depth in 1..=search_options.depth.unwrap_or(Ply::MAX) {
-            let score = negamax::<true>(
+            let score = thread.negamax::<true>(
                 &self.board,
-                &mut data,
                 &mut pv_line,
                 -Evaluation::INFINITY,
                 Evaluation::INFINITY,
@@ -95,20 +84,20 @@ impl<H: SearchHandler> Searcher<H> {
             );
 
             // Skip result handling if the iteration was interrupted
-            if data.info.stopped {
+            if thread.info.stopped {
                 break;
             }
 
             // Override the best score and move with that of the completed iteration
             // Important for when an iteration reports a worse score for the position
-            data.best_score = score;
-            data.best_move = pv_line.first();
+            thread.best_score = score;
+            thread.best_move = pv_line.first();
 
             self.handler.handle_result(SearchResult {
                 board: &self.board,
                 depth,
                 score,
-                info: &data.info,
+                info: &thread.info,
                 hashfull: self.transposition_table.len_permille(),
                 pv_line: &pv_line,
             });
@@ -130,219 +119,218 @@ impl<H: SearchHandler> Searcher<H> {
 
         SearchFinalResult {
             board: &self.board,
-            best_move: data.best_move,
-            info,
+            best_move: thread.best_move,
+            info: thread.info,
         }
     }
 }
 
-fn negamax<const PV_NODE: bool>(
-    board: &Board,
-    data: &mut SearchData<impl SearchHandler>,
-    pv_line: &mut PVLine,
-    mut alpha: Evaluation,
-    beta: Evaluation,
-    depth: Ply,
-    ply: Ply,
-) -> Evaluation {
-    // TODO: Considering reordering the following:
-    //     1. Transposition table check
-    //     2. Depth == 0 check
-    //     3. Stop check
-    //     4. Game status check
+struct SearchThread<'a, H: SearchHandler> {
+    board_hashes: &'a mut Vec<u64>,
+    transposition_table: &'a Arc<TranspositionTable>,
+    handler: &'a H,
+    info: SearchInfo,
+    best_score: Evaluation,
+    best_move: Option<Move>,
+}
 
-    data.info.nodes += 1;
+impl<H: SearchHandler> SearchThread<'_, H> {
+    fn negamax<const PV_NODE: bool>(
+        &mut self,
+        board: &Board,
+        pv_line: &mut PVLine,
+        mut alpha: Evaluation,
+        beta: Evaluation,
+        depth: Ply,
+        ply: Ply,
+    ) -> Evaluation {
+        // TODO: Considering reordering the following:
+        //     1. Transposition table check
+        //     2. Depth == 0 check
+        //     3. Stop check
+        //     4. Game status check
 
-    let alpha_original = alpha;
+        self.info.nodes += 1;
 
-    let mut hash_move = None;
+        let alpha_original = alpha;
 
-    // Probe the transposition table
-    if let Some(entry) = data.transposition_table.get(board) {
-        if !PV_NODE
-            && entry.depth >= depth
-            && ((entry.bound == Bound::Exact)
-                || (entry.bound == Bound::Lower && entry.score >= beta)
-                || (entry.bound == Bound::Upper && entry.score <= alpha))
-        {
-            pv_line.clear();
-            return entry.score;
+        let mut hash_move = None;
+
+        // Probe the transposition table
+        if let Some(entry) = self.transposition_table.get(board) {
+            if !PV_NODE
+                && entry.depth >= depth
+                && ((entry.bound == Bound::Exact)
+                    || (entry.bound == Bound::Lower && entry.score >= beta)
+                    || (entry.bound == Bound::Upper && entry.score <= alpha))
+            {
+                pv_line.clear();
+                return entry.score;
+            }
+
+            hash_move = Some(entry.best_move);
         }
 
-        hash_move = Some(entry.best_move);
-    }
+        // Leaf node checks
 
-    // Leaf node checks
+        if depth == 0 {
+            pv_line.clear();
+            return self.quiescence(board, -Evaluation::INFINITY, Evaluation::INFINITY);
+        }
 
-    if depth == 0 {
-        pv_line.clear();
-        return quiescence(
+        if self.handler.stopped(self.info.nodes) {
+            self.info.stopped = true;
+            return Evaluation::DRAW;
+        }
+
+        let mut moves = generate_moves::<false>(board);
+
+        match game_status(board, self.board_hashes, moves.is_empty()) {
+            GameStatus::Won => {
+                pv_line.clear();
+                return Evaluation::mated_in(ply);
+            }
+
+            GameStatus::Drawn => {
+                pv_line.clear();
+                return Evaluation::DRAW;
+            }
+
+            GameStatus::Ongoing => {}
+        }
+
+        order_moves(board, &mut moves, hash_move);
+
+        let mut best_score = -Evaluation::INFINITY;
+        let mut new_line = PVLine::new();
+
+        let mut first_move = true;
+
+        for mv in moves {
+            if self.info.stopped {
+                return Evaluation::DRAW;
+            }
+
+            let mut new_board = board.clone();
+            new_board.play_unchecked(mv);
+
+            self.board_hashes.push(new_board.hash());
+
+            let mut score = -Evaluation::INFINITY;
+
+            // Try a zero window search
+            if !PV_NODE || !first_move {
+                score = -self.negamax::<false>(
+                    &new_board,
+                    &mut new_line,
+                    -(alpha + 1),
+                    -alpha,
+                    depth - 1,
+                    ply + 1,
+                );
+            }
+
+            // Do a full window search on PV nodes or if the zero window search fails
+            if PV_NODE && (first_move || score > alpha) {
+                score = -self.negamax::<true>(
+                    &new_board,
+                    &mut new_line,
+                    -beta,
+                    -alpha,
+                    depth - 1,
+                    ply + 1,
+                );
+            }
+
+            self.board_hashes.pop();
+
+            if score > best_score {
+                best_score = score;
+                pv_line.extend(mv, &new_line);
+
+                // Track the best move across all search iterations
+                if ply == 0 && !self.info.stopped && score > self.best_score {
+                    self.best_score = score;
+                    self.best_move = Some(mv);
+                }
+
+                if score > alpha {
+                    alpha = score;
+                }
+            }
+
+            if score >= beta {
+                break;
+            }
+
+            first_move = false;
+        }
+
+        // Store result in the transposition table
+        self.transposition_table.set(
             board,
-            data.info,
-            -Evaluation::INFINITY,
-            Evaluation::INFINITY,
-        );
-    }
-
-    if data.handler.stopped(data.info.nodes) {
-        data.info.stopped = true;
-        return Evaluation::DRAW;
-    }
-
-    let mut moves = generate_moves::<false>(board);
-
-    match game_status(board, data.board_hashes, moves.is_empty()) {
-        GameStatus::Won => {
-            pv_line.clear();
-            return Evaluation::mated_in(ply);
-        }
-
-        GameStatus::Drawn => {
-            pv_line.clear();
-            return Evaluation::DRAW;
-        }
-
-        GameStatus::Ongoing => {}
-    }
-
-    order_moves(board, &mut moves, hash_move);
-
-    let mut best_score = -Evaluation::INFINITY;
-    let mut new_line = PVLine::new();
-
-    let mut first_move = true;
-
-    for mv in moves {
-        if data.info.stopped {
-            return Evaluation::DRAW;
-        }
-
-        let mut new_board = board.clone();
-        new_board.play_unchecked(mv);
-
-        data.board_hashes.push(new_board.hash());
-
-        let mut score = -Evaluation::INFINITY;
-
-        // Try a zero window search
-        if !PV_NODE || !first_move {
-            score = -negamax::<false>(
-                &new_board,
-                data,
-                &mut new_line,
-                -(alpha + 1),
-                -alpha,
-                depth - 1,
-                ply + 1,
-            );
-        }
-
-        // Do a full window search on PV nodes or if the zero window search fails
-        if PV_NODE && (first_move || score > alpha) {
-            score = -negamax::<true>(
-                &new_board,
-                data,
-                &mut new_line,
-                -beta,
-                -alpha,
-                depth - 1,
-                ply + 1,
-            );
-        }
-
-        data.board_hashes.pop();
-
-        if score > best_score {
-            best_score = score;
-            pv_line.extend(mv, &new_line);
-
-            // Track the best move across all search iterations
-            if ply == 0 && !data.info.stopped && score > data.best_score {
-                data.best_score = score;
-                data.best_move = Some(mv);
-            }
-
-            if score > alpha {
-                alpha = score;
-            }
-        }
-
-        if score >= beta {
-            break;
-        }
-
-        first_move = false;
-    }
-
-    // Store result in the transposition table
-    data.transposition_table.set(
-        board,
-        Data {
-            score: best_score,
-            bound: if best_score <= alpha_original {
-                Bound::Upper
-            } else if best_score >= beta {
-                Bound::Lower
-            } else {
-                Bound::Exact
+            Data {
+                score: best_score,
+                bound: if best_score <= alpha_original {
+                    Bound::Upper
+                } else if best_score >= beta {
+                    Bound::Lower
+                } else {
+                    Bound::Exact
+                },
+                depth,
+                best_move: pv_line
+                    .first()
+                    .expect("PV Line must be populated due to prior mate and draw checks"),
             },
-            depth,
-            best_move: pv_line
-                .first()
-                .expect("PV Line must be populated due to prior mate and draw checks"),
-        },
-    );
+        );
 
-    best_score
-}
-
-fn quiescence(
-    board: &Board,
-    info: &mut SearchInfo,
-    mut alpha: Evaluation,
-    beta: Evaluation,
-) -> Evaluation {
-    info.nodes += 1;
-
-    // TODO: Query transposition table in quiescent search
-    // TODO: Check check (evasions)
-    // TODO: Check leaf nodes?
-
-    // Stand pat
-
-    let mut best_score = evaluate(board);
-
-    if best_score >= beta {
-        return best_score;
+        best_score
     }
 
-    if best_score > alpha {
-        alpha = best_score
-    }
+    fn quiescence(&mut self, board: &Board, mut alpha: Evaluation, beta: Evaluation) -> Evaluation {
+        self.info.nodes += 1;
 
-    let mut moves = generate_moves::<true>(board);
-    order_moves(board, &mut moves, None);
+        // TODO: Query transposition table in quiescent search
+        // TODO: Check check (evasions)
+        // TODO: Check leaf nodes?
 
-    for mv in moves {
-        let mut new_board = board.clone();
-        new_board.play_unchecked(mv);
+        // Stand pat
 
-        let score = -quiescence(&new_board, info, -beta, -alpha);
+        let mut best_score = evaluate(board);
 
-        if score > best_score {
-            best_score = score;
+        if best_score >= beta {
+            return best_score;
+        }
 
-            if score > alpha {
-                alpha = score;
+        if best_score > alpha {
+            alpha = best_score
+        }
+
+        let mut moves = generate_moves::<true>(board);
+        order_moves(board, &mut moves, None);
+
+        for mv in moves {
+            let mut new_board = board.clone();
+            new_board.play_unchecked(mv);
+
+            let score = -self.quiescence(&new_board, -beta, -alpha);
+
+            if score > best_score {
+                best_score = score;
+
+                if score > alpha {
+                    alpha = score;
+                }
+            }
+
+            if score >= beta {
+                break;
             }
         }
 
-        if score >= beta {
-            break;
-        }
+        best_score
     }
-
-    best_score
 }
 
 fn generate_moves<const CAPTURES_ONLY: bool>(board: &Board) -> Vec<Move> {
