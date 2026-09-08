@@ -35,6 +35,7 @@ pub enum TimeOptions {
 
 pub struct SearchOptions {
     pub depth: Option<Ply>,
+    pub nodes: Option<usize>,
 }
 
 pub enum UciParseError {
@@ -44,6 +45,7 @@ pub enum UciParseError {
     IllegalMove,
     InvalidDuration,
     InvalidDepth,
+    InvalidNodes,
 }
 
 impl fmt::Display for UciParseError {
@@ -58,6 +60,7 @@ impl fmt::Display for UciParseError {
                 Self::IllegalMove => "Illegal move",
                 Self::InvalidDuration => "Invalid value for a time duration",
                 Self::InvalidDepth => "Invalid value for depth",
+                Self::InvalidNodes => "Invalid value for nodes",
             }
         )?;
 
@@ -166,6 +169,7 @@ impl Uci {
 
                 let mut search_options = SearchOptions {
                     depth: Some(Ply::MAX),
+                    nodes: None,
                 };
 
                 while let Some(token) = tokens.next() {
@@ -186,6 +190,16 @@ impl Uci {
                                     .parse()
                                     .map_err(|_| UciParseError::InvalidDepth)?,
                             );
+                        }
+
+                        "nodes" => {
+                            search_options.nodes = Some(
+                                tokens
+                                    .next()
+                                    .ok_or(UciParseError::ExpectedToken)?
+                                    .parse()
+                                    .map_err(|_| UciParseError::InvalidNodes)?,
+                            )
                         }
 
                         _ => return Err(UciParseError::UnexpectedToken),

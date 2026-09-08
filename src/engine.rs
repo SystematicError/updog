@@ -11,6 +11,7 @@ use std::thread::spawn;
 struct StandardHandler<F: Fn(SearchResult) + Send + 'static> {
     stop_flag: Arc<AtomicBool>,
     time_manager: TimeManager,
+    node_limit: Option<usize>,
     handle_result: F,
 }
 
@@ -19,11 +20,13 @@ impl<F: Fn(SearchResult) + Send + 'static> StandardHandler<F> {
         board: &Board,
         stop_flag: Arc<AtomicBool>,
         time_options: TimeOptions,
+        node_limit: Option<usize>,
         handle_result: F,
     ) -> Self {
         Self {
             stop_flag,
             time_manager: time_options.manager(board),
+            node_limit,
             handle_result,
         }
     }
@@ -37,7 +40,9 @@ impl<F: Fn(SearchResult) + Send + 'static> SearchHandler for StandardHandler<F> 
             return false;
         }
 
-        self.time_manager.stopped() || self.stop_flag.load(Ordering::Acquire)
+        self.time_manager.stopped()
+            || self.stop_flag.load(Ordering::Acquire)
+            || (self.node_limit.map_or(false, |limit| nodes > limit))
     }
 
     fn handle_result(&self, result: SearchResult) {
@@ -117,6 +122,7 @@ impl Engine {
             &self.board,
             Arc::clone(&self.stop_flag),
             time_options,
+            search_options.nodes,
             handle_result,
         );
 

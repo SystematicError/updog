@@ -90,7 +90,10 @@ pub fn bench(depth: Ply) -> (usize, Duration) {
                 Searcher::new(board, board_hashes, transposition_table, BenchHandler);
 
             searcher
-                .deepen(SearchOptions { depth: Some(depth) })
+                .deepen(SearchOptions {
+                    depth: Some(depth),
+                    nodes: None,
+                })
                 .info
                 .nodes
         })
