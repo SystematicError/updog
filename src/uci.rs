@@ -40,12 +40,12 @@ pub struct SearchOptions {
 
 pub enum UciParseError {
     ExpectedToken,
-    UnexpectedToken,
-    InvalidFen,
-    IllegalMove,
-    InvalidDuration,
-    InvalidDepth,
-    InvalidNodes,
+    UnexpectedToken(String),
+    InvalidFen(String),
+    IllegalMove(Move),
+    InvalidDuration(String),
+    InvalidDepth(String),
+    InvalidNodes(String),
 }
 
 impl fmt::Display for UciParseError {
@@ -54,13 +54,14 @@ impl fmt::Display for UciParseError {
             formatter,
             "UCI parse error: {}",
             match self {
-                Self::ExpectedToken => "Didn't receive an expected token",
-                Self::UnexpectedToken => "Received an unexpected token",
-                Self::InvalidFen => "Invalid FEN position",
-                Self::IllegalMove => "Illegal move",
-                Self::InvalidDuration => "Invalid value for a time duration",
-                Self::InvalidDepth => "Invalid value for depth",
-                Self::InvalidNodes => "Invalid value for nodes",
+                Self::ExpectedToken => String::from("Didn't receive an expected token"),
+                Self::UnexpectedToken(token) => format!("Received an unexpected token: {token}"),
+                Self::InvalidFen(fen) => format!("Invalid FEN position: {fen}"),
+                Self::IllegalMove(mv) => format!("Illegal move: {mv}"),
+                Self::InvalidDuration(token) =>
+                    format!("Invalid value for a time duration: {token}"),
+                Self::InvalidDepth(token) => format!("Invalid value for depth: {token}"),
+                Self::InvalidNodes(token) => format!("Invalid value for nodes: {token}"),
             }
         )?;
 
@@ -69,13 +70,11 @@ impl fmt::Display for UciParseError {
 }
 
 fn parse_duration(tokens: &mut SplitWhitespace<'_>) -> Result<Duration, UciParseError> {
-    Ok(Duration::from_millis(
-        tokens
-            .next()
-            .ok_or(UciParseError::ExpectedToken)?
-            .parse()
-            .map_err(|_| UciParseError::InvalidDuration)?,
-    ))
+    let token = tokens.next().ok_or(UciParseError::ExpectedToken)?;
+
+    Ok(Duration::from_millis(token.parse().map_err(|_| {
+        UciParseError::InvalidDuration(token.to_owned())
+    })?))
 }
 
 impl Uci {
@@ -88,166 +87,174 @@ impl Uci {
             None => return Ok(None),
         };
 
-        let parsed = match command {
-            "uci" => Self::Uci,
-            "isready" => Self::IsReady,
-            "ucinewgame" => Self::NewGame,
+        let parsed =
+            match command {
+                "uci" => Self::Uci,
+                "isready" => Self::IsReady,
+                "ucinewgame" => Self::NewGame,
 
-            "setoption" => {
-                if tokens.next().ok_or(UciParseError::ExpectedToken)? != "name" {
-                    return Err(UciParseError::UnexpectedToken);
-                }
-
-                let name: Vec<_> = tokens.by_ref().take_while(|&t| t != "value").collect();
-
-                if name.is_empty() {
-                    return Err(UciParseError::ExpectedToken);
-                }
-
-                let name = name.join(" ");
-
-                let value: Vec<_> = tokens.by_ref().collect();
-
-                let value = if value.is_empty() {
-                    None
-                } else {
-                    Some(value.join(" "))
-                };
-
-                Self::SetOption(name, value)
-            }
-
-            "position" => {
-                let board = match tokens.next().ok_or(UciParseError::ExpectedToken)? {
-                    "startpos" => Board::default(),
-
-                    "fen" => {
-                        let fen: Vec<_> = tokens.by_ref().take(6).collect();
-
-                        if fen.len() != 6 {
-                            return Err(UciParseError::InvalidFen);
-                        }
-
-                        Board::from_fen(&fen.join(" "), chess960)
-                            .map_err(|_| UciParseError::InvalidFen)?
+                "setoption" => {
+                    if let token = tokens.next().ok_or(UciParseError::ExpectedToken)?
+                        && token != "name"
+                    {
+                        return Err(UciParseError::UnexpectedToken(token.to_owned()));
                     }
 
-                    _ => return Err(UciParseError::UnexpectedToken),
-                };
+                    let name: Vec<_> = tokens
+                        .by_ref()
+                        .take_while(|&token| token != "value")
+                        .collect();
 
-                if let Some(token) = tokens.next()
-                    && token != "moves"
-                {
-                    return Err(UciParseError::UnexpectedToken);
+                    if name.is_empty() {
+                        return Err(UciParseError::ExpectedToken);
+                    }
+
+                    let name = name.join(" ");
+
+                    let value: Vec<_> = tokens.by_ref().collect();
+
+                    let value = if value.is_empty() {
+                        None
+                    } else {
+                        Some(value.join(" "))
+                    };
+
+                    Self::SetOption(name, value)
                 }
 
-                let mut moves = Vec::new();
-                let mut new_board = board.clone();
+                "position" => {
+                    let board = match tokens.next().ok_or(UciParseError::ExpectedToken)? {
+                        "startpos" => Board::default(),
 
-                for mv in tokens.by_ref() {
-                    let mv = parse_uci_move(&new_board, mv)
-                        .map_err(|_| UciParseError::UnexpectedToken)?;
+                        "fen" => {
+                            let fen: Vec<_> = tokens.by_ref().take(6).collect();
 
-                    new_board
-                        .try_play(mv)
-                        .map_err(|_| UciParseError::IllegalMove)?;
+                            if fen.len() != 6 {
+                                return Err(UciParseError::ExpectedToken);
+                            }
 
-                    moves.push(mv);
-                }
+                            let fen = fen.join(" ");
 
-                Self::Position(board, moves)
-            }
-
-            "go" => {
-                let mut wtime = Duration::ZERO;
-                let mut btime = Duration::ZERO;
-                let mut winc = Duration::ZERO;
-                let mut binc = Duration::ZERO;
-
-                let mut movetime = Duration::ZERO;
-                let mut infinite = false;
-
-                let mut search_options = SearchOptions {
-                    depth: Some(Ply::MAX),
-                    nodes: None,
-                };
-
-                while let Some(token) = tokens.next() {
-                    match token {
-                        "wtime" => wtime = parse_duration(&mut tokens)?,
-                        "btime" => btime = parse_duration(&mut tokens)?,
-                        "winc" => winc = parse_duration(&mut tokens)?,
-                        "binc" => binc = parse_duration(&mut tokens)?,
-
-                        "movetime" => movetime = parse_duration(tokens.by_ref())?,
-                        "infinite" => infinite = true,
-
-                        "depth" => {
-                            search_options.depth = Some(
-                                tokens
-                                    .next()
-                                    .ok_or(UciParseError::ExpectedToken)?
-                                    .parse()
-                                    .map_err(|_| UciParseError::InvalidDepth)?,
-                            );
+                            Board::from_fen(&fen, chess960)
+                                .map_err(|_| UciParseError::InvalidFen(fen))?
                         }
 
-                        "nodes" => {
-                            search_options.nodes = Some(
-                                tokens
-                                    .next()
-                                    .ok_or(UciParseError::ExpectedToken)?
-                                    .parse()
-                                    .map_err(|_| UciParseError::InvalidNodes)?,
-                            )
+                        token => return Err(UciParseError::UnexpectedToken(token.to_owned())),
+                    };
+
+                    if let Some(token) = tokens.next()
+                        && token != "moves"
+                    {
+                        return Err(UciParseError::UnexpectedToken(token.to_owned()));
+                    }
+
+                    let mut moves = Vec::new();
+                    let mut new_board = board.clone();
+
+                    for mv in tokens.by_ref() {
+                        let mv = parse_uci_move(&new_board, mv)
+                            .map_err(|_| UciParseError::UnexpectedToken(mv.to_owned()))?;
+
+                        new_board
+                            .try_play(mv)
+                            .map_err(|_| UciParseError::IllegalMove(mv))?;
+
+                        moves.push(mv);
+                    }
+
+                    Self::Position(board, moves)
+                }
+
+                "go" => {
+                    let mut wtime = Duration::ZERO;
+                    let mut btime = Duration::ZERO;
+                    let mut winc = Duration::ZERO;
+                    let mut binc = Duration::ZERO;
+
+                    let mut movetime = Duration::ZERO;
+                    let mut infinite = false;
+
+                    let mut search_options = SearchOptions {
+                        depth: Some(Ply::MAX),
+                        nodes: None,
+                    };
+
+                    while let Some(token) = tokens.next() {
+                        match token {
+                            "wtime" => wtime = parse_duration(&mut tokens)?,
+                            "btime" => btime = parse_duration(&mut tokens)?,
+                            "winc" => winc = parse_duration(&mut tokens)?,
+                            "binc" => binc = parse_duration(&mut tokens)?,
+
+                            "movetime" => movetime = parse_duration(tokens.by_ref())?,
+                            "infinite" => infinite = true,
+
+                            "depth" => {
+                                let token = tokens.next().ok_or(UciParseError::ExpectedToken)?;
+
+                                search_options.depth =
+                                    Some(token.parse().map_err(|_| {
+                                        UciParseError::InvalidDepth(token.to_owned())
+                                    })?);
+                            }
+
+                            "nodes" => {
+                                let token = tokens.next().ok_or(UciParseError::ExpectedToken)?;
+
+                                search_options.nodes =
+                                    Some(token.parse().map_err(|_| {
+                                        UciParseError::InvalidNodes(token.to_owned())
+                                    })?)
+                            }
+
+                            token => return Err(UciParseError::UnexpectedToken(token.to_owned())),
                         }
-
-                        _ => return Err(UciParseError::UnexpectedToken),
                     }
+
+                    // Get rid of default depth limit for infinite searches
+                    if infinite {
+                        search_options.depth = None;
+                    }
+
+                    let time_options = if infinite {
+                        TimeOptions::Infinite
+                    } else if movetime != Duration::ZERO {
+                        TimeOptions::MoveTime(movetime)
+                    } else if wtime != Duration::ZERO || btime != Duration::ZERO {
+                        TimeOptions::Clock {
+                            wtime,
+                            btime,
+                            winc,
+                            binc,
+                        }
+                    } else {
+                        TimeOptions::Infinite
+                    };
+
+                    Self::Go(time_options, search_options)
                 }
 
-                // Get rid of default depth limit for infinite searches
-                if infinite {
-                    search_options.depth = None;
+                "stop" => Self::Stop,
+                "quit" => Self::Quit,
+
+                "d" => Self::D,
+                "bench" => {
+                    let depth = match tokens.next() {
+                        Some(depth) => depth
+                            .parse()
+                            .map_err(|_| UciParseError::InvalidDepth(depth.to_owned()))?,
+                        None => DEPTH_DEFAULT,
+                    };
+
+                    Self::Bench(depth)
                 }
 
-                let time_options = if infinite {
-                    TimeOptions::Infinite
-                } else if movetime != Duration::ZERO {
-                    TimeOptions::MoveTime(movetime)
-                } else if wtime != Duration::ZERO || btime != Duration::ZERO {
-                    TimeOptions::Clock {
-                        wtime,
-                        btime,
-                        winc,
-                        binc,
-                    }
-                } else {
-                    TimeOptions::Infinite
-                };
-
-                Self::Go(time_options, search_options)
-            }
-
-            "stop" => Self::Stop,
-            "quit" => Self::Quit,
-
-            "d" => Self::D,
-            "bench" => {
-                let depth = match tokens.next() {
-                    Some(depth) => depth.parse().map_err(|_| UciParseError::InvalidDepth)?,
-                    None => DEPTH_DEFAULT,
-                };
-
-                Self::Bench(depth)
-            }
-
-            _ => return Err(UciParseError::UnexpectedToken),
-        };
+                token => return Err(UciParseError::UnexpectedToken(token.to_owned())),
+            };
 
         // Ensure all tokens have been consumed
-        if tokens.next().is_some() {
-            return Err(UciParseError::UnexpectedToken);
+        if let Some(token) = tokens.next() {
+            return Err(UciParseError::UnexpectedToken(token.to_owned()));
         }
 
         Ok(Some(parsed))
