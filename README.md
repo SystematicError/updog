@@ -12,6 +12,6 @@ Make, Rust, and [cargo-pgo](https://crates.io/crates/cargo-pgo) are required to 
 
 # Testing
 
-All patches that affect the engine's gameplay are tested using [Sequential Probability Ratio Tests](https://chessprogramming.org/Sequential_Probability_Ratio_Test) to ensure the intended change in engine strength before they ever get merged to `master`.
+All patches that affect the engine's gameplay are tested using [Sequential Probability Ratio Tests](https://chessprogramming.org/Sequential_Probability_Ratio_Test) to ensure the intended change in engine strength before they ever get merged to `master`. Currently, [OpenBench](https://github.com/SystematicError/updog-bench/) is used to distribute test workloads across multiple machines.
 
 Historical SPRT results can be found [here](https://github.com/SystematicError/updog/pulls?q=is%3Apr+label%3Atests).
