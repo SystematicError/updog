@@ -8,7 +8,7 @@ Updog is an experimental UCI chess engine. You can interact with it via UCI comp
 
 Currently there are no prebuilt binaries. You can build the project yourself using the `make native`, which produces a [pgo](https://doc.rust-lang.org/rustc/profile-guided-optimization.html) optimised build for the current host architecture.
 
-Make, Rust, and [cargo-pgo](https://crates.io/crates/cargo-pgo) are required to build this project.
+Make, Rust (with `llvm-tools-preview` extension), and `cargo-pgo` are required to build this project.
 
 # Testing
 
