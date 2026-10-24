@@ -215,6 +215,7 @@ impl<H: SearchHandler> SearchThread<'_, H> {
             new_board.play_unchecked(mv);
 
             self.board_hashes.push(new_board.hash());
+            self.transposition_table.prefetch(&new_board);
 
             let mut score = -Evaluation::INFINITY;
 

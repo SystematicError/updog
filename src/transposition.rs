@@ -155,6 +155,17 @@ impl TranspositionTable {
         }
     }
 
+    #[allow(unused_variables)]
+    pub fn prefetch(&self, board: &Board) {
+        #[cfg(target_arch = "x86_64")]
+        unsafe {
+            use std::arch::x86_64::{_MM_HINT_T0, _mm_prefetch};
+
+            let entry = &self.table[self.index(hash)];
+            _mm_prefetch::<__MM_HINT_TO>(entry as *const Entry as *const i8)
+        }
+    }
+
     pub fn len_permille(&self) -> usize {
         // Keeping track of the entry count introduces some extra reads
         // Since this is not called often, we estimate this instead
