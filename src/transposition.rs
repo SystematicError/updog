@@ -161,6 +161,7 @@ impl TranspositionTable {
         unsafe {
             use std::arch::x86_64::{_MM_HINT_T0, _mm_prefetch};
 
+            let hash = board.hash();
             let entry = &self.table[self.index(hash)];
             _mm_prefetch::<__MM_HINT_TO>(entry as *const Entry as *const i8)
         }
