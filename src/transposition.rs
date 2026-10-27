@@ -163,7 +163,7 @@ impl TranspositionTable {
 
             let hash = board.hash();
             let entry = &self.table[self.index(hash)];
-            _mm_prefetch::<__MM_HINT_T0>(entry as *const Entry as *const i8)
+            _mm_prefetch::<_MM_HINT_T0>(entry as *const Entry as *const i8)
         }
     }
 
